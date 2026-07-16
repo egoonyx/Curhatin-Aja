@@ -3,19 +3,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import Avatar from "@/components/Avatar";
 import { formatDateTime } from "@/lib/utils";
-import type { TaskAttachment } from "@/lib/types";
+import type { Profile, TaskAttachment } from "@/lib/types";
 
 export default function TaskAttachments({
   taskId,
   currentUserId,
   attachments,
   canDelete,
+  profilesById,
 }: {
   taskId: string;
   currentUserId: string;
   attachments: TaskAttachment[];
+  /** Admins/task creator can delete anyone's file; everyone can delete their own. */
   canDelete: boolean;
+  profilesById: Record<string, Profile>;
 }) {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
@@ -78,33 +82,42 @@ export default function TaskAttachments({
         <p className="text-sm text-slate-400">No files attached yet.</p>
       ) : (
         <div className="space-y-2">
-          {attachments.map((a) => (
-            <div
-              key={a.id}
-              className="flex items-center justify-between gap-2 rounded-xl border border-sky-100 px-3 py-2"
-            >
-              <a
-                href={a.file_url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex min-w-0 flex-1 items-center gap-2 text-sm text-sky-600 hover:underline"
+          {attachments.map((a) => {
+            const uploader = a.uploaded_by ? profilesById[a.uploaded_by] : null;
+            const canDeleteThis = canDelete || a.uploaded_by === currentUserId;
+            return (
+              <div
+                key={a.id}
+                className="flex items-center justify-between gap-2 rounded-xl border border-sky-100 px-3 py-2"
               >
-                <span>📎</span>
-                <span className="truncate">{a.file_name}</span>
-              </a>
-              <span className="shrink-0 text-xs text-slate-400">
-                {formatDateTime(a.created_at)}
-              </span>
-              {canDelete && (
-                <button
-                  onClick={() => handleDelete(a.id)}
-                  className="shrink-0 text-xs text-slate-400 hover:text-red-500"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Avatar name={uploader?.full_name ?? "?"} url={uploader?.avatar_url} size={24} />
+                  <div className="min-w-0">
+                    <a
+                      href={a.file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex min-w-0 items-center gap-1 truncate text-sm text-sky-600 hover:underline"
+                    >
+                      <span>📎</span>
+                      <span className="truncate">{a.file_name}</span>
+                    </a>
+                    <p className="truncate text-xs text-slate-400">
+                      {uploader?.full_name ?? "Unknown"} · {formatDateTime(a.created_at)}
+                    </p>
+                  </div>
+                </div>
+                {canDeleteThis && (
+                  <button
+                    onClick={() => handleDelete(a.id)}
+                    className="shrink-0 text-xs text-slate-400 hover:text-red-500"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
