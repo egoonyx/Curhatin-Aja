@@ -7,7 +7,13 @@ import Avatar from "@/components/Avatar";
 import { cn } from "@/lib/utils";
 import type { Profile, Task, TaskPriority, TaskStatus } from "@/lib/types";
 
-const STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
+const STATUSES: TaskStatus[] = ["todo", "revision", "reviewing", "done"];
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  todo: "New task",
+  revision: "Revision",
+  reviewing: "Reviewing",
+  done: "Complete",
+};
 const PRIORITIES: TaskPriority[] = ["low", "normal", "high"];
 
 export default function TaskDetail({
@@ -15,11 +21,13 @@ export default function TaskDetail({
   canEdit,
   allProfiles,
   assignees,
+  currentUserId,
 }: {
   task: Task;
   canEdit: boolean;
   allProfiles: Profile[];
   assignees: Profile[];
+  currentUserId: string;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -32,10 +40,23 @@ export default function TaskDetail({
   );
   const [priority, setPriority] = useState(task.priority);
   const [addingId, setAddingId] = useState("");
+  const [statusNote, setStatusNote] = useState("");
+  const [changingStatus, setChangingStatus] = useState(false);
 
   async function handleStatusChange(status: TaskStatus) {
+    if (status === task.status) return;
+    setChangingStatus(true);
     const supabase = createClient();
     await supabase.from("tasks").update({ status }).eq("id", task.id);
+    await supabase.from("task_status_updates").insert({
+      task_id: task.id,
+      changed_by: currentUserId,
+      from_status: task.status,
+      to_status: status,
+      note: statusNote.trim() || null,
+    });
+    setStatusNote("");
+    setChangingStatus(false);
     router.refresh();
   }
 
@@ -152,21 +173,35 @@ export default function TaskDetail({
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap gap-2 border-t border-sky-50 pt-4">
-          {STATUSES.map((s) => (
-            <button
-              key={s}
-              onClick={() => handleStatusChange(s)}
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
-                task.status === s
-                  ? "bg-sky-500 text-white"
-                  : "bg-sky-50 text-sky-700 hover:bg-sky-100"
-              )}
-            >
-              {s.replace("_", " ")}
-            </button>
-          ))}
+        <div className="mt-5 border-t border-sky-50 pt-4">
+          <div className="flex flex-wrap gap-2">
+            {STATUSES.map((s) => (
+              <button
+                key={s}
+                disabled={changingStatus}
+                onClick={() => handleStatusChange(s)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                  task.status === s
+                    ? "bg-sky-500 text-white"
+                    : "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                )}
+              >
+                {STATUS_LABELS[s]}
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 label">Note for the other person (optional)</p>
+          <textarea
+            className="input min-h-16 text-sm"
+            placeholder="e.g. Draft is ready for review, or: please tweak the intro"
+            value={statusNote}
+            onChange={(e) => setStatusNote(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Add a note above, then tap a status to submit it - the other person will be
+            notified.
+          </p>
         </div>
       </div>
 

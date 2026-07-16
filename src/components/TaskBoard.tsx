@@ -2,9 +2,10 @@ import TaskCard from "@/components/TaskCard";
 import type { Profile, Task, TaskStatus } from "@/lib/types";
 
 const COLUMNS: { key: TaskStatus; label: string }[] = [
-  { key: "todo", label: "To do" },
-  { key: "in_progress", label: "In progress" },
-  { key: "done", label: "Done" },
+  { key: "todo", label: "New task" },
+  { key: "revision", label: "Revision" },
+  { key: "reviewing", label: "Reviewing" },
+  { key: "done", label: "Complete" },
 ];
 
 export default function TaskBoard({
@@ -17,7 +18,7 @@ export default function TaskBoard({
   departmentNames?: Record<string, string>;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       {COLUMNS.map((col) => {
         const columnTasks = tasks.filter((t) => t.status === col.key);
         return (
