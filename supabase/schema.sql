@@ -122,6 +122,32 @@ create table if not exists public.file_shares (
 -- (the chat_messages equivalent is added further below, after that table exists)
 alter table public.task_attachments add column if not exists gallery_file_id uuid references public.files (id) on delete set null;
 
+-- =========================================================
+-- MEETINGS (calendar, optionally linked to a task or chat, with an
+-- auto-generated Zoom link when ZOOM_* env vars are configured)
+-- =========================================================
+
+create table if not exists public.meetings (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  task_id uuid references public.tasks (id) on delete cascade,
+  channel_id uuid references public.chat_channels (id) on delete cascade,
+  created_by uuid references public.profiles (id) on delete set null,
+  start_time timestamptz not null,
+  end_time timestamptz,
+  zoom_join_url text,
+  zoom_start_url text,
+  zoom_meeting_id text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.meeting_attendees (
+  meeting_id uuid not null references public.meetings (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  primary key (meeting_id, profile_id)
+);
+
 create table if not exists public.attendance (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles (id) on delete cascade,
@@ -207,6 +233,8 @@ alter table public.task_attachments enable row level security;
 alter table public.task_status_updates enable row level security;
 alter table public.files enable row level security;
 alter table public.file_shares enable row level security;
+alter table public.meetings enable row level security;
+alter table public.meeting_attendees enable row level security;
 alter table public.attendance enable row level security;
 alter table public.chat_channels enable row level security;
 alter table public.chat_channel_members enable row level security;
@@ -387,6 +415,73 @@ create policy "file_shares_delete" on public.file_shares
     )
   );
 
+-- meetings: task-linked meetings are workspace-wide visible (like tasks
+-- themselves); channel-linked meetings are only visible to channel members;
+-- otherwise visible to the creator, attendees, and admins
+drop policy if exists "meetings_select" on public.meetings;
+create policy "meetings_select" on public.meetings
+  for select to authenticated
+  using (
+    public.is_admin(auth.uid())
+    or created_by = auth.uid()
+    or task_id is not null
+    or exists (
+      select 1 from public.meeting_attendees ma
+      where ma.meeting_id = meetings.id and ma.profile_id = auth.uid()
+    )
+    or (
+      channel_id is not null
+      and exists (
+        select 1 from public.chat_channel_members m
+        where m.channel_id = meetings.channel_id and m.profile_id = auth.uid()
+      )
+    )
+  );
+
+drop policy if exists "meetings_insert" on public.meetings;
+create policy "meetings_insert" on public.meetings
+  for insert to authenticated with check (auth.uid() = created_by);
+
+drop policy if exists "meetings_update" on public.meetings;
+create policy "meetings_update" on public.meetings
+  for update to authenticated
+  using (auth.uid() = created_by or public.is_admin(auth.uid()));
+
+drop policy if exists "meetings_delete" on public.meetings;
+create policy "meetings_delete" on public.meetings
+  for delete to authenticated
+  using (auth.uid() = created_by or public.is_admin(auth.uid()));
+
+-- meeting_attendees: visible to any signed-in user (needed to resolve
+-- "who's invited" without recursive checks); only the meeting's creator or
+-- an admin can add/remove attendees, and attendees can remove themselves
+drop policy if exists "meeting_attendees_select" on public.meeting_attendees;
+create policy "meeting_attendees_select" on public.meeting_attendees
+  for select to authenticated using (true);
+
+drop policy if exists "meeting_attendees_insert" on public.meeting_attendees;
+create policy "meeting_attendees_insert" on public.meeting_attendees
+  for insert to authenticated
+  with check (
+    public.is_admin(auth.uid())
+    or exists (
+      select 1 from public.meetings mt
+      where mt.id = meeting_attendees.meeting_id and mt.created_by = auth.uid()
+    )
+  );
+
+drop policy if exists "meeting_attendees_delete" on public.meeting_attendees;
+create policy "meeting_attendees_delete" on public.meeting_attendees
+  for delete to authenticated
+  using (
+    profile_id = auth.uid()
+    or public.is_admin(auth.uid())
+    or exists (
+      select 1 from public.meetings mt
+      where mt.id = meeting_attendees.meeting_id and mt.created_by = auth.uid()
+    )
+  );
+
 -- attendance: private to the employee and admins
 drop policy if exists "attendance_select" on public.attendance;
 create policy "attendance_select" on public.attendance
@@ -482,6 +577,13 @@ begin
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'tasks'
   ) then
     alter publication supabase_realtime add table public.tasks;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'meetings'
+  ) then
+    alter publication supabase_realtime add table public.meetings;
   end if;
 end $$;
 
@@ -677,6 +779,40 @@ drop trigger if exists on_file_share_insert on public.file_shares;
 create trigger on_file_share_insert
   after insert on public.file_shares
   for each row execute function public.notify_file_shared();
+
+-- invited to a meeting -> notify the attendee (not the meeting's creator)
+create or replace function public.notify_meeting_scheduled()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  mt record;
+begin
+  select * into mt from public.meetings where id = new.meeting_id;
+  if mt.created_by is distinct from new.profile_id then
+    insert into public.notifications (profile_id, type, message, link)
+    values (
+      new.profile_id,
+      'meeting_scheduled',
+      'You were invited to a meeting: ' || coalesce(mt.title, 'Untitled meeting')
+        || ' at ' || to_char(mt.start_time, 'Mon DD, HH24:MI'),
+      case
+        when mt.task_id is not null then '/dashboard/tasks/' || mt.task_id
+        when mt.channel_id is not null then '/dashboard/chat/' || mt.channel_id
+        else '/dashboard/calendar'
+      end
+    );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_meeting_attendee_insert on public.meeting_attendees;
+create trigger on_meeting_attendee_insert
+  after insert on public.meeting_attendees
+  for each row execute function public.notify_meeting_scheduled();
 
 -- added to a chat channel/DM -> notify the person added (not the creator)
 create or replace function public.notify_chat_member_added()
