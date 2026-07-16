@@ -24,8 +24,19 @@ create table if not exists public.profiles (
   avatar_url text,
   department_id uuid references public.departments (id) on delete set null,
   is_admin boolean not null default false,
+  -- work schedule: which days this person is expected to work (0=Sun..6=Sat)
+  -- and their working hours, so attendance/late checks only apply on those days
+  work_days smallint[] not null default '{1,2,3,4,5}',
+  work_start_time time not null default '09:00',
+  work_end_time time not null default '17:00',
   created_at timestamptz not null default now()
 );
+
+-- for installs that ran an earlier version of this schema before the
+-- work schedule columns existed; safe to re-run
+alter table public.profiles add column if not exists work_days smallint[] not null default '{1,2,3,4,5}';
+alter table public.profiles add column if not exists work_start_time time not null default '09:00';
+alter table public.profiles add column if not exists work_end_time time not null default '17:00';
 
 create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),
@@ -365,3 +376,141 @@ create policy "chat_attachments_public_read" on storage.objects
 drop policy if exists "chat_attachments_auth_write" on storage.objects;
 create policy "chat_attachments_auth_write" on storage.objects
   for insert to authenticated with check (bucket_id = 'chat-attachments');
+
+-- =========================================================
+-- NOTIFICATIONS
+-- Auto-populated by triggers below when: a task is assigned to you,
+-- you're added to a chat, or someone joins your department.
+-- =========================================================
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  type text not null,
+  message text not null,
+  link text,
+  read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "notifications_select" on public.notifications;
+create policy "notifications_select" on public.notifications
+  for select to authenticated using (auth.uid() = profile_id);
+
+drop policy if exists "notifications_update" on public.notifications;
+create policy "notifications_update" on public.notifications
+  for update to authenticated using (auth.uid() = profile_id);
+
+-- task assigned -> notify the assignee
+create or replace function public.notify_task_assignee()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  task_title text;
+begin
+  select title into task_title from public.tasks where id = new.task_id;
+  insert into public.notifications (profile_id, type, message, link)
+  values (
+    new.profile_id,
+    'task_assigned',
+    'You were assigned to: ' || coalesce(task_title, 'a task'),
+    '/dashboard/tasks/' || new.task_id
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists on_task_assignee_insert on public.task_assignees;
+create trigger on_task_assignee_insert
+  after insert on public.task_assignees
+  for each row execute function public.notify_task_assignee();
+
+-- added to a chat channel/DM -> notify the person added (not the creator)
+create or replace function public.notify_chat_member_added()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  chan record;
+begin
+  select * into chan from public.chat_channels where id = new.channel_id;
+  if chan.created_by is distinct from new.profile_id then
+    insert into public.notifications (profile_id, type, message, link)
+    values (
+      new.profile_id,
+      'chat_added',
+      case
+        when chan.is_dm then 'You have a new direct message conversation'
+        else 'You were added to #' || coalesce(chan.name, 'a channel')
+      end,
+      '/dashboard/chat/' || new.channel_id
+    );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_chat_member_insert on public.chat_channel_members;
+create trigger on_chat_member_insert
+  after insert on public.chat_channel_members
+  for each row execute function public.notify_chat_member_added();
+
+-- someone joins your department -> notify existing department members
+create or replace function public.notify_department_new_member()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  member record;
+  new_name text;
+begin
+  if new.department_id is null then
+    return new;
+  end if;
+  if TG_OP = 'UPDATE' and old.department_id is not distinct from new.department_id then
+    return new;
+  end if;
+
+  select full_name into new_name from public.profiles where id = new.id;
+
+  for member in
+    select id from public.profiles
+    where department_id = new.department_id and id <> new.id
+  loop
+    insert into public.notifications (profile_id, type, message, link)
+    values (
+      member.id,
+      'department_member',
+      coalesce(new_name, 'Someone') || ' joined your department',
+      '/dashboard/directory/' || new.id
+    );
+  end loop;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_profile_department_insert on public.profiles;
+create trigger on_profile_department_insert
+  after insert on public.profiles
+  for each row execute function public.notify_department_new_member();
+
+drop trigger if exists on_profile_department_update on public.profiles;
+create trigger on_profile_department_update
+  after update of department_id on public.profiles
+  for each row execute function public.notify_department_new_member();
+
+do $$
+begin
+  alter publication supabase_realtime add table public.notifications;
+exception when duplicate_object then null;
+end $$;
