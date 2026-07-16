@@ -108,6 +108,15 @@ export type GalleryFile = {
   file_name: string;
   file_url: string;
   file_size: number | null;
+  folder_id: string | null;
+  created_at: string;
+};
+
+export type GalleryFolder = {
+  id: string;
+  department_id: string;
+  name: string;
+  created_by: string | null;
   created_at: string;
 };
 
