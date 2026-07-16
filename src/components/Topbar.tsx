@@ -26,7 +26,7 @@ export default function Topbar({ profile }: { profile: Profile }) {
       >
         ☰
       </label>
-      <div className="flex items-center gap-2 sm:gap-4">
+      <div className="ml-auto flex items-center gap-2 sm:gap-4">
         <NotificationBell currentUserId={profile.id} />
         <Link
           href="/dashboard/profile"
