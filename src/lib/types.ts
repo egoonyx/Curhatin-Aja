@@ -89,6 +89,26 @@ export type TaskStatusUpdate = {
   created_at: string;
 };
 
+export type Meeting = {
+  id: string;
+  title: string;
+  description: string | null;
+  task_id: string | null;
+  channel_id: string | null;
+  created_by: string | null;
+  start_time: string;
+  end_time: string | null;
+  zoom_join_url: string | null;
+  zoom_start_url: string | null;
+  zoom_meeting_id: string | null;
+  created_at: string;
+};
+
+export type MeetingAttendee = {
+  meeting_id: string;
+  profile_id: string;
+};
+
 export type AttendanceStatus = "present" | "late" | "absent" | "leave";
 
 export type Attendance = {
