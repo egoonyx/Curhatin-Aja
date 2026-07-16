@@ -144,7 +144,7 @@ export default function ChatWindow({
           📎
           <input
             type="file"
-            className="hidden"
+            className="sr-only"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
         </label>

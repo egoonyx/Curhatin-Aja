@@ -234,7 +234,7 @@ export default function NewTaskModal({
                 <label className="label">Related files</label>
                 <label className="btn-secondary inline-block cursor-pointer text-xs">
                   + Add file
-                  <input type="file" multiple className="hidden" onChange={handleFilesChange} />
+                  <input type="file" multiple className="sr-only" onChange={handleFilesChange} />
                 </label>
                 {files.length > 0 && (
                   <ul className="mt-2 space-y-1">
