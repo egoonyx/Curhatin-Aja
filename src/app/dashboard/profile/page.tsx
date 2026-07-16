@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import ProfileEditForm from "@/components/ProfileEditForm";
+import AccountSecurityForm from "@/components/AccountSecurityForm";
 import type { Department, Profile } from "@/lib/types";
 
 export default async function ProfilePage() {
@@ -24,6 +25,12 @@ export default async function ProfilePage() {
         profile={profile as Profile}
         departments={(departments as Department[]) ?? []}
       />
+
+      <div>
+        <h2 className="text-lg font-semibold text-slate-800">Account & security</h2>
+        <p className="text-sm text-slate-500">Update your login email or password.</p>
+      </div>
+      <AccountSecurityForm currentEmail={user.email ?? ""} />
     </div>
   );
 }
