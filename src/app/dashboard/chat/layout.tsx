@@ -50,13 +50,19 @@ export default async function ChatLayout({
   });
 
   return (
-    <div className="-m-6 flex h-[calc(100vh-4rem)]">
+    <div className="-m-4 flex h-[calc(100vh-4rem)] sm:-m-6">
+      <input type="checkbox" id="chat-list-toggle" className="peer/chat hidden" />
+      <label
+        htmlFor="chat-list-toggle"
+        aria-hidden="true"
+        className="fixed inset-0 z-30 hidden bg-slate-900/40 peer-checked/chat:block md:!hidden"
+      />
       <ChatChannelList
         items={items}
         profiles={(allProfiles as Profile[]) ?? []}
         currentUserId={user.id}
       />
-      <div className="flex flex-1 flex-col">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
     </div>
   );
 }
