@@ -51,6 +51,24 @@ export type TaskAttachment = {
   file_url: string;
   file_name: string;
   created_at: string;
+  gallery_file_id?: string | null;
+};
+
+export type GalleryFile = {
+  id: string;
+  department_id: string;
+  uploaded_by: string | null;
+  file_name: string;
+  file_url: string;
+  file_size: number | null;
+  created_at: string;
+};
+
+export type FileShare = {
+  file_id: string;
+  profile_id: string;
+  shared_by: string | null;
+  created_at: string;
 };
 
 export type TaskComment = {
@@ -105,4 +123,5 @@ export type ChatMessage = {
   attachment_url: string | null;
   attachment_name: string | null;
   created_at: string;
+  gallery_file_id?: string | null;
 };
