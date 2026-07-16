@@ -9,12 +9,13 @@ export default async function CalendarPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: meetings }, { data: allProfiles }] = await Promise.all([
+  const [{ data: meetings }, { data: allProfiles }, { data: myProfile }] = await Promise.all([
     supabase
       .from("meetings")
       .select("*, tasks(title), chat_channels(name, is_dm)")
       .order("start_time", { ascending: true }),
     supabase.from("profiles").select("*").order("full_name"),
+    supabase.from("profiles").select("is_admin").eq("id", user.id).single(),
   ]);
 
   const meetingRows = meetings ?? [];
@@ -60,6 +61,7 @@ export default async function CalendarPage() {
 
       <CalendarView
         currentUserId={user.id}
+        isAdmin={myProfile?.is_admin ?? false}
         allProfiles={(allProfiles as Profile[]) ?? []}
         meetings={meetingsWithContext}
       />
