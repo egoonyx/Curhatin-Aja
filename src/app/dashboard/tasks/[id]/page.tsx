@@ -85,6 +85,7 @@ export default async function TaskDetailPage({
         currentUserId={user.id}
         attachments={(attachments as TaskAttachment[]) ?? []}
         canDelete={canEdit}
+        profilesById={profilesById}
       />
 
       <TaskStatusHistory
