@@ -28,11 +28,17 @@ export default async function AttendancePage({
   const today = new Date().toISOString().slice(0, 10);
   const selectedDate = date ?? today;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, { data: allDepartmentsData }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).single(),
+    supabase.from("departments").select("*"),
+  ]);
+
+  const allDepartmentsAlways = (allDepartmentsData as Department[]) ?? [];
+  const specialistsDeptId = allDepartmentsAlways.find((d) => d.name === "Specialists")?.id;
+  const me = profile as Profile;
+  // Specialists (helpers/psychologists) are associates - they aren't required
+  // to check in daily, only to keep their availability up to date.
+  const isSpecialistAssociate = !!specialistsDeptId && me?.department_id === specialistsDeptId;
 
   const [{ data: todayAttendance }, { data: history }] = await Promise.all([
     supabase
@@ -52,17 +58,17 @@ export default async function AttendancePage({
   let allProfiles: Profile[] = [];
   let allAttendanceForDate: Attendance[] = [];
   let reportAttendance: Attendance[] = [];
-  const me = profile as Profile;
 
   if (me?.is_admin) {
     const isSuperAdmin = me.role === "super_admin";
 
-    const [{ data: profiles }, { data: departments }] = await Promise.all([
-      supabase.from("profiles").select("*").order("full_name"),
-      supabase.from("departments").select("*"),
-    ]);
-    const allDepartments = (departments as Department[]) ?? [];
-    const everyone = (profiles as Profile[]) ?? [];
+    const { data: profiles } = await supabase.from("profiles").select("*").order("full_name");
+    const allDepartments = allDepartmentsAlways;
+    // Specialists don't have daily attendance - exclude them from the
+    // attendance table/report regardless of who's viewing.
+    const everyone = ((profiles as Profile[]) ?? []).filter(
+      (p) => !specialistsDeptId || p.department_id !== specialistsDeptId
+    );
 
     if (isSuperAdmin) {
       allProfiles = everyone;
@@ -104,15 +110,28 @@ export default async function AttendancePage({
         <p className="text-sm text-slate-500">Check in and out, and track your history.</p>
       </div>
 
-      <div className="card p-5">
-        <AttendanceButton
-          profileId={user.id}
-          initialAttendance={todayAttendance as Attendance | null}
-          workDays={(profile as Profile)?.work_days ?? [1, 2, 3, 4, 5]}
-          workStartTime={(profile as Profile)?.work_start_time ?? "09:00"}
-        />
-      </div>
+      {isSpecialistAssociate ? (
+        <div className="card p-5">
+          <p className="text-sm text-slate-600">
+            As a Specialist associate, you&apos;re not required to check in daily. Just keep your{" "}
+            <Link href="/dashboard/profile" className="font-medium text-sky-600 hover:underline">
+              weekly availability
+            </Link>{" "}
+            up to date so people know when to reach you.
+          </p>
+        </div>
+      ) : (
+        <div className="card p-5">
+          <AttendanceButton
+            profileId={user.id}
+            initialAttendance={todayAttendance as Attendance | null}
+            workDays={(profile as Profile)?.work_days ?? [1, 2, 3, 4, 5]}
+            workStartTime={(profile as Profile)?.work_start_time ?? "09:00"}
+          />
+        </div>
+      )}
 
+      {!isSpecialistAssociate && (
       <div className="card p-5">
         <h2 className="mb-3 text-sm font-semibold text-slate-700">Your last 30 days</h2>
         {!history || history.length === 0 ? (
@@ -150,6 +169,7 @@ export default async function AttendancePage({
           </div>
         )}
       </div>
+      )}
 
       {(profile as Profile)?.is_admin && (
         <div className="card p-5">
