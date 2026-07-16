@@ -64,7 +64,7 @@ export default function TaskAttachments({
     <div className="card p-6">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-700">Related files</h2>
-        <label className="cursor-pointer text-xs font-medium text-sky-600 hover:underline">
+        <label className="relative cursor-pointer text-xs font-medium text-sky-600 hover:underline">
           {uploading ? "Uploading..." : "+ Add file"}
           <input type="file" className="sr-only" disabled={uploading} onChange={handleUpload} />
         </label>

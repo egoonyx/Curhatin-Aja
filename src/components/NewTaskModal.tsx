@@ -232,7 +232,7 @@ export default function NewTaskModal({
 
               <div>
                 <label className="label">Related files</label>
-                <label className="btn-secondary inline-block cursor-pointer text-xs">
+                <label className="btn-secondary relative inline-block cursor-pointer text-xs">
                   + Add file
                   <input type="file" multiple className="sr-only" onChange={handleFilesChange} />
                 </label>

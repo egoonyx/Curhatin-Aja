@@ -140,7 +140,7 @@ export default function ChatWindow({
         onSubmit={handleSubmit}
         className="flex shrink-0 items-center gap-2 border-t border-sky-100 p-3 sm:p-4"
       >
-        <label className="cursor-pointer text-slate-400 hover:text-sky-600">
+        <label className="relative cursor-pointer text-slate-400 hover:text-sky-600">
           📎
           <input
             type="file"
