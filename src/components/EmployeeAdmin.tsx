@@ -36,17 +36,40 @@ export default function EmployeeAdmin({
     router.refresh();
   }
 
+  async function handleDeleteAccount(target: Profile) {
+    if (
+      !confirm(
+        `Permanently delete ${target.full_name}'s account? This removes their login and all of their data (tasks, attendance, files, messages, etc.) and can't be undone.`
+      )
+    )
+      return;
+    const supabase = createClient();
+    const { error } = await supabase.rpc("admin_delete_profile", { target_id: target.id });
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  function canDelete(target: Profile) {
+    if (target.id === currentUserId) return false;
+    if (isSuperAdmin) return true;
+    return target.role === "employee";
+  }
+
   return (
     <div className="card p-5">
       <h2 className="mb-3 text-sm font-semibold text-slate-700">Employees</h2>
       <div className="-mx-5 overflow-x-auto px-5">
-      <table className="w-full min-w-[620px] text-left text-sm">
+      <table className="w-full min-w-[700px] text-left text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wide text-slate-400">
             <th className="pb-2">Name</th>
             <th className="pb-2">Department</th>
             <th className="pb-2">Schedule</th>
             <th className="pb-2">Role</th>
+            <th className="pb-2"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-sky-50">
@@ -110,11 +133,21 @@ export default function EmployeeAdmin({
                   <span className="text-slate-500">{ROLE_LABELS[p.role]}</span>
                 )}
               </td>
+              <td className="py-2 text-right">
+                {canDelete(p) && (
+                  <button
+                    onClick={() => handleDeleteAccount(p)}
+                    className="text-xs font-medium text-slate-400 hover:text-red-500"
+                  >
+                    Delete account
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
           {profiles.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-4 text-center text-slate-400">
+              <td colSpan={5} className="py-4 text-center text-slate-400">
                 No one here yet.
               </td>
             </tr>

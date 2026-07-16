@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import ShareFileModal from "@/components/ShareFileModal";
 import { formatDateTime } from "@/lib/utils";
-import type { Department, GalleryFile, Profile } from "@/lib/types";
+import type { Department, GalleryFile, GalleryFolder, Profile } from "@/lib/types";
 
 function formatSize(bytes: number | null) {
   if (!bytes) return "";
@@ -29,9 +29,12 @@ export default function FileGallery({
 }) {
   const [tab, setTab] = useState<"department" | "shared">("department");
   const [departmentId, setDepartmentId] = useState(defaultDepartmentId);
+  const [folders, setFolders] = useState<GalleryFolder[]>([]);
+  const [currentFolder, setCurrentFolder] = useState<GalleryFolder | null>(null);
   const [files, setFiles] = useState<GalleryFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<GalleryFile | null>(null);
 
@@ -43,15 +46,24 @@ export default function FileGallery({
     if (tab === "department") {
       if (!departmentId) {
         setFiles([]);
+        setFolders([]);
         setLoading(false);
         return;
       }
-      const { data } = await supabase
-        .from("files")
-        .select("*")
-        .eq("department_id", departmentId)
-        .order("created_at", { ascending: false });
-      setFiles((data as GalleryFile[]) ?? []);
+      const [{ data: fileData }, { data: folderData }] = await Promise.all([
+        supabase
+          .from("files")
+          .select("*")
+          .eq("department_id", departmentId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("file_folders")
+          .select("*")
+          .eq("department_id", departmentId)
+          .order("name"),
+      ]);
+      setFiles((fileData as GalleryFile[]) ?? []);
+      setFolders((folderData as GalleryFolder[]) ?? []);
     } else {
       const { data } = await supabase
         .from("file_shares")
@@ -60,14 +72,57 @@ export default function FileGallery({
         .order("created_at", { ascending: false });
       const shared = (data ?? []).map((r) => r.files as unknown as GalleryFile).filter(Boolean);
       setFiles(shared);
+      setFolders([]);
     }
     setLoading(false);
   }
 
   useEffect(() => {
+    setCurrentFolder(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, departmentId]);
+
+  async function handleCreateFolder() {
+    const name = prompt("Folder name?")?.trim();
+    if (!name) return;
+    if (!departmentId) {
+      setError("Choose a department first.");
+      return;
+    }
+    setCreatingFolder(true);
+    setError(null);
+    const supabase = createClient();
+    const { error: insertError } = await supabase.from("file_folders").insert({
+      department_id: departmentId,
+      name,
+      created_by: currentUserId,
+    });
+    if (insertError) setError(insertError.message);
+    setCreatingFolder(false);
+    load();
+  }
+
+  async function handleDeleteFolder(folder: GalleryFolder) {
+    const filesInFolder = files.filter((f) => f.folder_id === folder.id);
+    const confirmMsg =
+      filesInFolder.length > 0
+        ? `Delete "${folder.name}" and the ${filesInFolder.length} file(s) inside it? This can't be undone.`
+        : `Delete empty folder "${folder.name}"?`;
+    if (!confirm(confirmMsg)) return;
+
+    const supabase = createClient();
+    const marker = "/gallery-files/";
+    for (const file of filesInFolder) {
+      const idx = file.file_url.indexOf(marker);
+      if (idx !== -1) {
+        await supabase.storage.from("gallery-files").remove([file.file_url.slice(idx + marker.length)]);
+      }
+    }
+    await supabase.from("file_folders").delete().eq("id", folder.id);
+    if (currentFolder?.id === folder.id) setCurrentFolder(null);
+    load();
+  }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const fileList = Array.from(e.target.files ?? []);
@@ -97,6 +152,7 @@ export default function FileGallery({
         file_name: file.name,
         file_url: fileUrl,
         file_size: file.size,
+        folder_id: currentFolder?.id ?? null,
       });
     }
 
@@ -116,6 +172,11 @@ export default function FileGallery({
     }
     load();
   }
+
+  const visibleFiles =
+    tab === "department"
+      ? files.filter((f) => (currentFolder ? f.folder_id === currentFolder.id : !f.folder_id))
+      : files;
 
   return (
     <div className="space-y-4">
@@ -156,18 +217,40 @@ export default function FileGallery({
         )}
 
         {tab === "department" && (
-          <label className="btn-primary relative inline-flex cursor-pointer items-center justify-center text-sm">
-            {uploading ? "Uploading..." : "+ Upload file"}
-            <input
-              type="file"
-              multiple
-              className="sr-only"
-              disabled={uploading}
-              onChange={handleUpload}
-            />
-          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCreateFolder}
+              disabled={creatingFolder}
+              className="btn-secondary text-sm"
+            >
+              {creatingFolder ? "Creating..." : "+ New folder"}
+            </button>
+            <label className="btn-primary relative inline-flex cursor-pointer items-center justify-center text-sm">
+              {uploading ? "Uploading..." : "+ Upload file"}
+              <input
+                type="file"
+                multiple
+                className="sr-only"
+                disabled={uploading}
+                onChange={handleUpload}
+              />
+            </label>
+          </div>
         )}
       </div>
+
+      {tab === "department" && currentFolder && (
+        <div className="flex items-center gap-2 text-sm">
+          <button
+            onClick={() => setCurrentFolder(null)}
+            className="font-medium text-sky-600 hover:underline"
+          >
+            ← All files
+          </button>
+          <span className="text-slate-300">/</span>
+          <span className="font-medium text-slate-600">📁 {currentFolder.name}</span>
+        </div>
+      )}
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
@@ -175,51 +258,90 @@ export default function FileGallery({
 
       {loading ? (
         <p className="text-sm text-slate-400">Loading...</p>
-      ) : files.length === 0 ? (
-        <div className="card p-6 text-sm text-slate-400">Nothing here yet.</div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {files.map((f) => {
-            const uploader = f.uploaded_by ? profilesById[f.uploaded_by] : null;
-            const canManage = isAdmin || f.uploaded_by === currentUserId;
-            return (
-              <div key={f.id} className="card flex flex-col gap-2 p-4">
-                <a
-                  href={f.file_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="truncate text-sm font-medium text-sky-600 hover:underline"
-                >
-                  📄 {f.file_name}
-                </a>
-                <div className="flex items-center gap-2">
-                  <Avatar name={uploader?.full_name ?? "?"} url={uploader?.avatar_url} size={22} />
-                  <p className="min-w-0 truncate text-xs text-slate-400">
-                    {uploader?.full_name ?? "Unknown"} · {formatDateTime(f.created_at)}
-                  </p>
-                </div>
-                {f.file_size ? (
-                  <p className="text-xs text-slate-400">{formatSize(f.file_size)}</p>
-                ) : null}
-                {canManage && (
-                  <div className="mt-1 flex flex-wrap gap-3 border-t border-sky-50 pt-2 text-xs">
+        <div className="space-y-4">
+          {tab === "department" && !currentFolder && folders.length > 0 && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {folders.map((folder) => {
+                const canManageFolder = isAdmin || folder.created_by === currentUserId;
+                const fileCount = files.filter((f) => f.folder_id === folder.id).length;
+                return (
+                  <div key={folder.id} className="card flex items-center justify-between gap-2 p-4">
                     <button
-                      onClick={() => setShareTarget(f)}
-                      className="font-medium text-sky-600 hover:underline"
+                      onClick={() => setCurrentFolder(folder)}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
-                      Share
+                      <span className="text-xl">📁</span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-700">{folder.name}</p>
+                        <p className="text-xs text-slate-400">
+                          {fileCount} file{fileCount === 1 ? "" : "s"}
+                        </p>
+                      </div>
                     </button>
-                    <button
-                      onClick={() => handleDelete(f)}
-                      className="font-medium text-slate-400 hover:text-red-500"
-                    >
-                      Remove
-                    </button>
+                    {canManageFolder && (
+                      <button
+                        onClick={() => handleDeleteFolder(folder)}
+                        className="shrink-0 text-xs font-medium text-slate-400 hover:text-red-500"
+                      >
+                        Remove
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
+
+          {visibleFiles.length === 0 ? (
+            (currentFolder || folders.length === 0) && (
+              <div className="card p-6 text-sm text-slate-400">Nothing here yet.</div>
+            )
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {visibleFiles.map((f) => {
+                const uploader = f.uploaded_by ? profilesById[f.uploaded_by] : null;
+                const canManage = isAdmin || f.uploaded_by === currentUserId;
+                return (
+                  <div key={f.id} className="card flex flex-col gap-2 p-4">
+                    <a
+                      href={f.file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate text-sm font-medium text-sky-600 hover:underline"
+                    >
+                      📄 {f.file_name}
+                    </a>
+                    <div className="flex items-center gap-2">
+                      <Avatar name={uploader?.full_name ?? "?"} url={uploader?.avatar_url} size={22} />
+                      <p className="min-w-0 truncate text-xs text-slate-400">
+                        {uploader?.full_name ?? "Unknown"} · {formatDateTime(f.created_at)}
+                      </p>
+                    </div>
+                    {f.file_size ? (
+                      <p className="text-xs text-slate-400">{formatSize(f.file_size)}</p>
+                    ) : null}
+                    {canManage && (
+                      <div className="mt-1 flex flex-wrap gap-3 border-t border-sky-50 pt-2 text-xs">
+                        <button
+                          onClick={() => setShareTarget(f)}
+                          className="font-medium text-sky-600 hover:underline"
+                        >
+                          Share
+                        </button>
+                        <button
+                          onClick={() => handleDelete(f)}
+                          className="font-medium text-slate-400 hover:text-red-500"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
