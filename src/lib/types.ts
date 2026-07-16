@@ -9,7 +9,13 @@ export type Profile = {
   department_id: string | null;
   is_admin: boolean;
   created_at: string;
+  // 0 = Sunday ... 6 = Saturday
+  work_days: number[];
+  work_start_time: string;
+  work_end_time: string;
 };
+
+export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export type Department = {
   id: string;
