@@ -3,18 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
+import GalleryPicker from "@/components/GalleryPicker";
 import { formatDateTime } from "@/lib/utils";
-import type { ChatMessage, Profile } from "@/lib/types";
+import type { ChatMessage, GalleryFile, Profile } from "@/lib/types";
 
 export default function ChatWindow({
   channelId,
   currentUserId,
+  currentUserDepartmentId,
   initialMessages,
   profilesById,
   title,
 }: {
   channelId: string;
   currentUserId: string;
+  /** Fresh chat uploads are also saved into this department's file gallery, if set. */
+  currentUserDepartmentId?: string | null;
   initialMessages: ChatMessage[];
   profilesById: Record<string, Profile>;
   title: string;
@@ -22,6 +26,8 @@ export default function ChatWindow({
   const [messages, setMessages] = useState(initialMessages);
   const [body, setBody] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [galleryAttachment, setGalleryAttachment] = useState<GalleryFile | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -54,14 +60,19 @@ export default function ChatWindow({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!body.trim() && !file) return;
+    if (!body.trim() && !file && !galleryAttachment) return;
     setSending(true);
     const supabase = createClient();
 
     let attachmentUrl: string | null = null;
     let attachmentName: string | null = null;
+    let galleryFileId: string | null = null;
 
-    if (file) {
+    if (galleryAttachment) {
+      attachmentUrl = galleryAttachment.file_url;
+      attachmentName = galleryAttachment.file_name;
+      galleryFileId = galleryAttachment.id;
+    } else if (file) {
       const path = `${channelId}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from("chat-attachments")
@@ -70,6 +81,22 @@ export default function ChatWindow({
         attachmentUrl = supabase.storage.from("chat-attachments").getPublicUrl(path).data
           .publicUrl;
         attachmentName = file.name;
+
+        // also save a copy into the sender's own department gallery
+        if (currentUserDepartmentId) {
+          const { data: galleryRow } = await supabase
+            .from("files")
+            .insert({
+              department_id: currentUserDepartmentId,
+              uploaded_by: currentUserId,
+              file_name: file.name,
+              file_url: attachmentUrl,
+              file_size: file.size,
+            })
+            .select()
+            .single();
+          galleryFileId = galleryRow?.id ?? null;
+        }
       }
     }
 
@@ -79,11 +106,19 @@ export default function ChatWindow({
       body: body.trim() || null,
       attachment_url: attachmentUrl,
       attachment_name: attachmentName,
+      gallery_file_id: galleryFileId,
     });
 
     setBody("");
     setFile(null);
+    setGalleryAttachment(null);
     setSending(false);
+  }
+
+  function handleGallerySelect(f: GalleryFile) {
+    setPickerOpen(false);
+    setFile(null);
+    setGalleryAttachment(f);
   }
 
   return (
@@ -136,28 +171,66 @@ export default function ChatWindow({
         <div ref={bottomRef} />
       </div>
 
+      {(file || galleryAttachment) && (
+        <div className="flex items-center justify-between border-t border-sky-50 px-4 py-2 text-xs text-slate-500 sm:px-6">
+          <span className="truncate">
+            📎 {file ? file.name : galleryAttachment?.file_name}
+            {galleryAttachment && " (from gallery)"}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setFile(null);
+              setGalleryAttachment(null);
+            }}
+            className="shrink-0 text-slate-400 hover:text-red-500"
+          >
+            Remove
+          </button>
+        </div>
+      )}
+
       <form
         onSubmit={handleSubmit}
         className="flex shrink-0 items-center gap-2 border-t border-sky-100 p-3 sm:p-4"
       >
-        <label className="relative cursor-pointer text-slate-400 hover:text-sky-600">
+        <label className="relative cursor-pointer text-xl text-slate-400 hover:text-sky-600">
           📎
           <input
             type="file"
             className="sr-only"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              setGalleryAttachment(null);
+              setFile(e.target.files?.[0] ?? null);
+            }}
           />
         </label>
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          className="shrink-0 text-xl text-slate-400 hover:text-sky-600"
+          aria-label="Attach from gallery"
+        >
+          🗃️
+        </button>
         <input
           className="input flex-1"
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder={file ? `${file.name} attached...` : "Type a message..."}
+          placeholder="Type a message..."
         />
         <button type="submit" disabled={sending} className="btn-primary">
           Send
         </button>
       </form>
+
+      {pickerOpen && (
+        <GalleryPicker
+          currentUserId={currentUserId}
+          onSelect={handleGallerySelect}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }

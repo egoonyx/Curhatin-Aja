@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
-import type { Profile } from "@/lib/types";
+import GalleryPicker from "@/components/GalleryPicker";
+import type { GalleryFile, Profile } from "@/lib/types";
 
 export default function NewTaskModal({
   departmentId,
@@ -30,6 +31,8 @@ export default function NewTaskModal({
   const [priority, setPriority] = useState("normal");
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
+  const [galleryFiles, setGalleryFiles] = useState<GalleryFile[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState(
     departmentId ?? departments?.[0]?.id ?? ""
   );
@@ -41,6 +44,17 @@ export default function NewTaskModal({
 
   function removeFile(name: string) {
     setFiles((prev) => prev.filter((f) => f.name !== name));
+  }
+
+  function handleGallerySelect(file: GalleryFile) {
+    setPickerOpen(false);
+    if (!galleryFiles.some((f) => f.id === file.id)) {
+      setGalleryFiles((prev) => [...prev, file]);
+    }
+  }
+
+  function removeGalleryFile(id: string) {
+    setGalleryFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
   function toggleAssignee(id: string) {
@@ -56,6 +70,7 @@ export default function NewTaskModal({
     setPriority("normal");
     setAssigneeIds([]);
     setFiles([]);
+    setGalleryFiles([]);
     setSelectedDepartmentId(departmentId ?? departments?.[0]?.id ?? "");
     setError(null);
   }
@@ -104,13 +119,38 @@ export default function NewTaskModal({
       if (!uploadError) {
         const fileUrl = supabase.storage.from("task-attachments").getPublicUrl(path).data
           .publicUrl;
+
+        // also save a copy into the department's file gallery
+        const { data: galleryRow } = await supabase
+          .from("files")
+          .insert({
+            department_id: targetDepartmentId,
+            uploaded_by: currentUserId,
+            file_name: file.name,
+            file_url: fileUrl,
+            file_size: file.size,
+          })
+          .select()
+          .single();
+
         await supabase.from("task_attachments").insert({
           task_id: task.id,
           uploaded_by: currentUserId,
           file_url: fileUrl,
           file_name: file.name,
+          gallery_file_id: galleryRow?.id ?? null,
         });
       }
+    }
+
+    for (const gf of galleryFiles) {
+      await supabase.from("task_attachments").insert({
+        task_id: task.id,
+        uploaded_by: currentUserId,
+        file_url: gf.file_url,
+        file_name: gf.file_name,
+        gallery_file_id: gf.id,
+      });
     }
 
     setLoading(false);
@@ -232,11 +272,20 @@ export default function NewTaskModal({
 
               <div>
                 <label className="label">Related files</label>
-                <label className="btn-secondary relative inline-block cursor-pointer text-xs">
-                  + Add file
-                  <input type="file" multiple className="sr-only" onChange={handleFilesChange} />
-                </label>
-                {files.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  <label className="btn-secondary relative inline-block cursor-pointer text-xs">
+                    + Add file
+                    <input type="file" multiple className="sr-only" onChange={handleFilesChange} />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setPickerOpen(true)}
+                    className="btn-secondary text-xs"
+                  >
+                    From gallery
+                  </button>
+                </div>
+                {(files.length > 0 || galleryFiles.length > 0) && (
                   <ul className="mt-2 space-y-1">
                     {files.map((f) => (
                       <li
@@ -247,6 +296,21 @@ export default function NewTaskModal({
                         <button
                           type="button"
                           onClick={() => removeFile(f.name)}
+                          className="ml-2 shrink-0 text-slate-400 hover:text-red-500"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                    {galleryFiles.map((f) => (
+                      <li
+                        key={f.id}
+                        className="flex items-center justify-between rounded-lg bg-sky-50 px-3 py-1.5 text-xs text-slate-600"
+                      >
+                        <span className="truncate">📎 {f.file_name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeGalleryFile(f.id)}
                           className="ml-2 shrink-0 text-slate-400 hover:text-red-500"
                         >
                           Remove
@@ -278,6 +342,14 @@ export default function NewTaskModal({
             </form>
           </div>
         </div>
+      )}
+
+      {pickerOpen && (
+        <GalleryPicker
+          currentUserId={currentUserId}
+          onSelect={handleGallerySelect}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
     </>
   );
