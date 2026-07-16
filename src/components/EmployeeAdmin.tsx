@@ -34,7 +34,8 @@ export default function EmployeeAdmin({
   return (
     <div className="card p-5">
       <h2 className="mb-3 text-sm font-semibold text-slate-700">Employees</h2>
-      <table className="w-full text-left text-sm">
+      <div className="-mx-5 overflow-x-auto px-5">
+      <table className="w-full min-w-[480px] text-left text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wide text-slate-400">
             <th className="pb-2">Name</th>
@@ -85,6 +86,7 @@ export default function EmployeeAdmin({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

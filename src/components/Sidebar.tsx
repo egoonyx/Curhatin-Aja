@@ -21,15 +21,31 @@ export default function Sidebar({ isAdmin }: { isAdmin: boolean }) {
     : NAV_ITEMS;
 
   return (
-    <nav className="flex h-full w-60 shrink-0 flex-col border-r border-sky-100 bg-white px-3 py-6">
-      <div className="mb-8 flex items-center gap-2 px-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500 text-sm font-semibold text-white">
-          CA
+    <nav
+      className={cn(
+        "fixed inset-y-0 left-0 z-40 flex h-full w-64 -translate-x-full shrink-0 flex-col",
+        "border-r border-sky-100 bg-white px-3 py-6 transition-transform duration-200 ease-in-out",
+        "peer-checked:translate-x-0",
+        "lg:static lg:w-60 lg:translate-x-0"
+      )}
+    >
+      <div className="mb-8 flex items-center justify-between px-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500 text-sm font-semibold text-white">
+            CA
+          </div>
+          <span className="font-semibold text-slate-800">Curhatin Aja</span>
         </div>
-        <span className="font-semibold text-slate-800">Curhatin Aja</span>
+        <label
+          htmlFor="sidebar-toggle"
+          className="cursor-pointer rounded-lg p-1 text-slate-400 hover:bg-sky-50 hover:text-sky-700 lg:hidden"
+          aria-label="Close menu"
+        >
+          ✕
+        </label>
       </div>
 
-      <div className="flex flex-1 flex-col gap-1">
+      <div className="flex flex-1 flex-col gap-1 overflow-y-auto">
         {items.map((item) => {
           const active =
             item.href === "/dashboard"

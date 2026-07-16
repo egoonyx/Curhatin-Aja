@@ -17,15 +17,21 @@ export default function Topbar({ profile }: { profile: Profile }) {
   }
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-sky-100 bg-white px-6">
-      <div />
-      <div className="flex items-center gap-4">
+    <header className="flex h-16 shrink-0 items-center justify-between border-b border-sky-100 bg-white px-4 sm:px-6">
+      <label
+        htmlFor="sidebar-toggle"
+        className="cursor-pointer rounded-lg p-2 text-xl text-slate-500 hover:bg-sky-50 lg:hidden"
+        aria-label="Open menu"
+      >
+        ☰
+      </label>
+      <div className="flex items-center gap-2 sm:gap-4">
         <Link
           href="/dashboard/profile"
           className="flex items-center gap-2 rounded-xl px-2 py-1 hover:bg-sky-50"
         >
           <Avatar name={profile.full_name} url={profile.avatar_url} size={32} />
-          <div className="text-left">
+          <div className="hidden text-left sm:block">
             <p className="text-sm font-medium leading-tight text-slate-800">
               {profile.full_name}
             </p>

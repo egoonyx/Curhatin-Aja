@@ -88,18 +88,25 @@ export default function ChatWindow({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 shrink-0 items-center border-b border-sky-100 px-6">
-        <h2 className="font-medium text-slate-800">{title}</h2>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-sky-100 px-4 sm:px-6">
+        <label
+          htmlFor="chat-list-toggle"
+          className="cursor-pointer rounded-lg p-1 text-xl text-slate-500 hover:bg-sky-50 md:hidden"
+          aria-label="Show conversations"
+        >
+          ☰
+        </label>
+        <h2 className="truncate font-medium text-slate-800">{title}</h2>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
         {messages.map((m) => {
           const sender = profilesById[m.sender_id];
           const isMe = m.sender_id === currentUserId;
           return (
             <div key={m.id} className={`flex gap-3 ${isMe ? "flex-row-reverse" : ""}`}>
               <Avatar name={sender?.full_name ?? "?"} url={sender?.avatar_url} size={28} />
-              <div className={`max-w-md ${isMe ? "text-right" : ""}`}>
+              <div className={`max-w-[75%] sm:max-w-md ${isMe ? "text-right" : ""}`}>
                 <p className="text-xs text-slate-400">
                   {sender?.full_name ?? "Unknown"} · {formatDateTime(m.created_at)}
                 </p>
@@ -131,7 +138,7 @@ export default function ChatWindow({
 
       <form
         onSubmit={handleSubmit}
-        className="flex shrink-0 items-center gap-2 border-t border-sky-100 p-4"
+        className="flex shrink-0 items-center gap-2 border-t border-sky-100 p-3 sm:p-4"
       >
         <label className="cursor-pointer text-slate-400 hover:text-sky-600">
           📎

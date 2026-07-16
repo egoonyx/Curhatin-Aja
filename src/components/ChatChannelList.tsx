@@ -27,10 +27,26 @@ export default function ChatChannelList({
   const dms = items.filter((i) => i.isDm);
 
   return (
-    <div className="flex h-full w-64 shrink-0 flex-col gap-4 border-r border-sky-100 bg-white p-4">
-      <div className="space-y-2">
-        <NewDmButton profiles={profiles} currentUserId={currentUserId} />
-        <NewChannelButton profiles={profiles} currentUserId={currentUserId} />
+    <div
+      className={cn(
+        "fixed inset-y-0 left-0 z-40 flex h-full w-64 -translate-x-full shrink-0 flex-col gap-4",
+        "border-r border-sky-100 bg-white p-4 transition-transform duration-200 ease-in-out",
+        "peer-checked/chat:translate-x-0",
+        "md:static md:translate-x-0"
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <NewDmButton profiles={profiles} currentUserId={currentUserId} />
+          <NewChannelButton profiles={profiles} currentUserId={currentUserId} />
+        </div>
+        <label
+          htmlFor="chat-list-toggle"
+          className="cursor-pointer rounded-lg p-1 text-slate-400 hover:bg-sky-50 hover:text-sky-700 md:hidden"
+          aria-label="Close conversations"
+        >
+          ✕
+        </label>
       </div>
 
       <div>
