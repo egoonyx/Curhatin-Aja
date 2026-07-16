@@ -104,9 +104,16 @@ export default function FileGallery({
     load();
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(file: GalleryFile) {
+    if (!confirm(`Delete "${file.file_name}"? This can't be undone.`)) return;
     const supabase = createClient();
-    await supabase.from("files").delete().eq("id", id);
+    await supabase.from("files").delete().eq("id", file.id);
+    const marker = "/gallery-files/";
+    const idx = file.file_url.indexOf(marker);
+    if (idx !== -1) {
+      const storagePath = file.file_url.slice(idx + marker.length);
+      await supabase.storage.from("gallery-files").remove([storagePath]);
+    }
     load();
   }
 
@@ -203,7 +210,7 @@ export default function FileGallery({
                       Share
                     </button>
                     <button
-                      onClick={() => handleDelete(f.id)}
+                      onClick={() => handleDelete(f)}
                       className="font-medium text-slate-400 hover:text-red-500"
                     >
                       Remove

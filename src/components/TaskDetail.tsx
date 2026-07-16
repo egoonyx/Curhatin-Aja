@@ -44,6 +44,21 @@ export default function TaskDetail({
   const [statusNote, setStatusNote] = useState("");
   const [changingStatus, setChangingStatus] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDeleteTask() {
+    if (!confirm("Delete this task? This can't be undone.")) return;
+    setDeleting(true);
+    const supabase = createClient();
+    const { error } = await supabase.from("tasks").delete().eq("id", task.id);
+    if (error) {
+      setDeleting(false);
+      alert("Couldn't delete this task: " + error.message);
+      return;
+    }
+    router.push("/dashboard/tasks");
+    router.refresh();
+  }
 
   async function handleStatusChange(status: TaskStatus) {
     if (status === task.status) return;
@@ -161,6 +176,15 @@ export default function TaskDetail({
                 {canEdit && (
                   <button className="btn-ghost" onClick={() => setEditing(true)}>
                     Edit
+                  </button>
+                )}
+                {canEdit && (
+                  <button
+                    className="text-xs text-slate-400 hover:text-red-500"
+                    disabled={deleting}
+                    onClick={handleDeleteTask}
+                  >
+                    {deleting ? "Deleting..." : "Delete"}
                   </button>
                 )}
               </div>
