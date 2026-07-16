@@ -4,18 +4,22 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import WorkScheduleEditor from "@/components/WorkScheduleEditor";
-import type { Department, Profile } from "@/lib/types";
+import { ROLE_LABELS } from "@/lib/types";
+import type { Department, Profile, Role } from "@/lib/types";
 
 export default function EmployeeAdmin({
   profiles,
   departments,
   currentUserId,
+  currentUserRole,
 }: {
   profiles: Profile[];
   departments: Department[];
   currentUserId: string;
+  currentUserRole: Role;
 }) {
   const router = useRouter();
+  const isSuperAdmin = currentUserRole === "super_admin";
 
   async function handleDepartmentChange(profileId: string, departmentId: string) {
     const supabase = createClient();
@@ -26,9 +30,9 @@ export default function EmployeeAdmin({
     router.refresh();
   }
 
-  async function handleAdminToggle(profileId: string, isAdmin: boolean) {
+  async function handleRoleChange(profileId: string, role: Role) {
     const supabase = createClient();
-    await supabase.from("profiles").update({ is_admin: isAdmin }).eq("id", profileId);
+    await supabase.from("profiles").update({ role }).eq("id", profileId);
     router.refresh();
   }
 
@@ -42,7 +46,7 @@ export default function EmployeeAdmin({
             <th className="pb-2">Name</th>
             <th className="pb-2">Department</th>
             <th className="pb-2">Schedule</th>
-            <th className="pb-2">Admin</th>
+            <th className="pb-2">Role</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-sky-50">
@@ -58,18 +62,24 @@ export default function EmployeeAdmin({
                 </div>
               </td>
               <td className="py-2">
-                <select
-                  className="input py-1 text-sm"
-                  defaultValue={p.department_id ?? ""}
-                  onChange={(e) => handleDepartmentChange(p.id, e.target.value)}
-                >
-                  <option value="">Unassigned</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
+                {isSuperAdmin ? (
+                  <select
+                    className="input py-1 text-sm"
+                    defaultValue={p.department_id ?? ""}
+                    onChange={(e) => handleDepartmentChange(p.id, e.target.value)}
+                  >
+                    <option value="">Unassigned</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-slate-500">
+                    {departments.find((d) => d.id === p.department_id)?.name ?? "Unassigned"}
+                  </span>
+                )}
               </td>
               <td className="py-2">
                 <WorkScheduleEditor
@@ -80,20 +90,35 @@ export default function EmployeeAdmin({
                 />
               </td>
               <td className="py-2">
-                <input
-                  type="checkbox"
-                  defaultChecked={p.is_admin}
-                  disabled={p.id === currentUserId && p.is_admin}
-                  onChange={(e) => handleAdminToggle(p.id, e.target.checked)}
-                  title={
-                    p.id === currentUserId && p.is_admin
-                      ? "Ask another admin to remove your admin access"
-                      : undefined
-                  }
-                />
+                {isSuperAdmin ? (
+                  <select
+                    className="input py-1 text-sm"
+                    defaultValue={p.role}
+                    disabled={p.id === currentUserId}
+                    title={
+                      p.id === currentUserId
+                        ? "Ask another Super Admin to change your role"
+                        : undefined
+                    }
+                    onChange={(e) => handleRoleChange(p.id, e.target.value as Role)}
+                  >
+                    <option value="employee">Employee</option>
+                    <option value="admin">Admin (this department)</option>
+                    <option value="super_admin">Super Admin</option>
+                  </select>
+                ) : (
+                  <span className="text-slate-500">{ROLE_LABELS[p.role]}</span>
+                )}
               </td>
             </tr>
           ))}
+          {profiles.length === 0 && (
+            <tr>
+              <td colSpan={4} className="py-4 text-center text-slate-400">
+                No one here yet.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
       </div>

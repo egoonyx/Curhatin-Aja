@@ -15,12 +15,26 @@ const NAV_ITEMS = [
   { href: "/dashboard/directory", label: "Directory", icon: "👥" },
 ];
 
-export default function Sidebar({ isAdmin }: { isAdmin: boolean }) {
+export default function Sidebar({
+  isAdmin,
+  showContent = false,
+}: {
+  isAdmin: boolean;
+  showContent?: boolean;
+}) {
   const pathname = usePathname();
 
-  const items = isAdmin
-    ? [...NAV_ITEMS, { href: "/dashboard/admin", label: "Admin", icon: "⚙️" }]
-    : NAV_ITEMS;
+  let items = NAV_ITEMS;
+  if (showContent) {
+    items = [
+      ...items.slice(0, 4),
+      { href: "/dashboard/content", label: "Content Analysis", icon: "📊" },
+      ...items.slice(4),
+    ];
+  }
+  if (isAdmin) {
+    items = [...items, { href: "/dashboard/admin", label: "Admin", icon: "⚙️" }];
+  }
 
   return (
     <nav
