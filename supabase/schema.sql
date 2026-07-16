@@ -92,6 +92,36 @@ create table if not exists public.task_attachments (
   created_at timestamptz not null default now()
 );
 
+-- =========================================================
+-- FILE GALLERY (Drive-style department file store)
+-- Every file belongs to one department; the uploader (or an admin) can
+-- also share it with individual people outside that department via
+-- file_shares. Task/chat attachments can either upload fresh (which also
+-- saves a copy here) or link an existing gallery file.
+-- =========================================================
+
+create table if not exists public.files (
+  id uuid primary key default gen_random_uuid(),
+  department_id uuid not null references public.departments (id) on delete cascade,
+  uploaded_by uuid references public.profiles (id) on delete set null,
+  file_name text not null,
+  file_url text not null,
+  file_size bigint,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.file_shares (
+  file_id uuid not null references public.files (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  shared_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (file_id, profile_id)
+);
+
+-- optional link back to the gallery file a task attachment came from
+-- (the chat_messages equivalent is added further below, after that table exists)
+alter table public.task_attachments add column if not exists gallery_file_id uuid references public.files (id) on delete set null;
+
 create table if not exists public.attendance (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles (id) on delete cascade,
@@ -127,6 +157,9 @@ create table if not exists public.chat_messages (
   attachment_name text,
   created_at timestamptz not null default now()
 );
+
+-- optional link back to the gallery file a chat attachment came from
+alter table public.chat_messages add column if not exists gallery_file_id uuid references public.files (id) on delete set null;
 
 -- =========================================================
 -- updated_at trigger for tasks
@@ -172,6 +205,8 @@ alter table public.task_assignees enable row level security;
 alter table public.task_comments enable row level security;
 alter table public.task_attachments enable row level security;
 alter table public.task_status_updates enable row level security;
+alter table public.files enable row level security;
+alter table public.file_shares enable row level security;
 alter table public.attendance enable row level security;
 alter table public.chat_channels enable row level security;
 alter table public.chat_channel_members enable row level security;
@@ -297,6 +332,61 @@ drop policy if exists "task_status_updates_insert" on public.task_status_updates
 create policy "task_status_updates_insert" on public.task_status_updates
   for insert to authenticated with check (auth.uid() = changed_by);
 
+-- files: visible to your own department, anyone it's individually shared
+-- with, the uploader, and admins; anyone can upload into their own department
+drop policy if exists "files_select" on public.files;
+create policy "files_select" on public.files
+  for select to authenticated
+  using (
+    public.is_admin(auth.uid())
+    or uploaded_by = auth.uid()
+    or department_id = (select department_id from public.profiles where id = auth.uid())
+    or exists (
+      select 1 from public.file_shares fs
+      where fs.file_id = files.id and fs.profile_id = auth.uid()
+    )
+  );
+
+drop policy if exists "files_insert" on public.files;
+create policy "files_insert" on public.files
+  for insert to authenticated with check (auth.uid() = uploaded_by);
+
+drop policy if exists "files_delete" on public.files;
+create policy "files_delete" on public.files
+  for delete to authenticated
+  using (auth.uid() = uploaded_by or public.is_admin(auth.uid()));
+
+-- file_shares: visible to anyone (so "shared with" lists resolve without
+-- recursive checks); only the file's owner or an admin can share/unshare it
+drop policy if exists "file_shares_select" on public.file_shares;
+create policy "file_shares_select" on public.file_shares
+  for select to authenticated using (true);
+
+drop policy if exists "file_shares_insert" on public.file_shares;
+create policy "file_shares_insert" on public.file_shares
+  for insert to authenticated
+  with check (
+    shared_by = auth.uid()
+    and exists (
+      select 1 from public.files f
+      where f.id = file_shares.file_id
+      and (f.uploaded_by = auth.uid() or public.is_admin(auth.uid()))
+    )
+  );
+
+drop policy if exists "file_shares_delete" on public.file_shares;
+create policy "file_shares_delete" on public.file_shares
+  for delete to authenticated
+  using (
+    shared_by = auth.uid()
+    or profile_id = auth.uid()
+    or public.is_admin(auth.uid())
+    or exists (
+      select 1 from public.files f
+      where f.id = file_shares.file_id and f.uploaded_by = auth.uid()
+    )
+  );
+
 -- attendance: private to the employee and admins
 drop policy if exists "attendance_select" on public.attendance;
 create policy "attendance_select" on public.attendance
@@ -414,6 +504,10 @@ insert into storage.buckets (id, name, public)
 values ('task-attachments', 'task-attachments', true)
 on conflict (id) do nothing;
 
+insert into storage.buckets (id, name, public)
+values ('gallery-files', 'gallery-files', true)
+on conflict (id) do nothing;
+
 drop policy if exists "avatars_public_read" on storage.objects;
 create policy "avatars_public_read" on storage.objects
   for select using (bucket_id = 'avatars');
@@ -445,6 +539,18 @@ create policy "task_attachments_auth_write" on storage.objects
 drop policy if exists "task_attachments_auth_delete" on storage.objects;
 create policy "task_attachments_auth_delete" on storage.objects
   for delete to authenticated using (bucket_id = 'task-attachments');
+
+drop policy if exists "gallery_files_public_read" on storage.objects;
+create policy "gallery_files_public_read" on storage.objects
+  for select using (bucket_id = 'gallery-files');
+
+drop policy if exists "gallery_files_auth_write" on storage.objects;
+create policy "gallery_files_auth_write" on storage.objects
+  for insert to authenticated with check (bucket_id = 'gallery-files');
+
+drop policy if exists "gallery_files_auth_delete" on storage.objects;
+create policy "gallery_files_auth_delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'gallery-files');
 
 -- =========================================================
 -- NOTIFICATIONS
@@ -542,6 +648,35 @@ drop trigger if exists on_task_status_change on public.tasks;
 create trigger on_task_status_change
   after update of status on public.tasks
   for each row execute function public.notify_task_status_change();
+
+-- a file was shared with you -> notify you
+create or replace function public.notify_file_shared()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  fname text;
+begin
+  select file_name into fname from public.files where id = new.file_id;
+  if new.shared_by is null or new.shared_by <> new.profile_id then
+    insert into public.notifications (profile_id, type, message, link)
+    values (
+      new.profile_id,
+      'file_shared',
+      'A file was shared with you: ' || coalesce(fname, 'a file'),
+      '/dashboard/files'
+    );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_file_share_insert on public.file_shares;
+create trigger on_file_share_insert
+  after insert on public.file_shares
+  for each row execute function public.notify_file_shared();
 
 -- added to a chat channel/DM -> notify the person added (not the creator)
 create or replace function public.notify_chat_member_added()
