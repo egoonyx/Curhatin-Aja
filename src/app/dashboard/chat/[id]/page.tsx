@@ -23,16 +23,18 @@ export default async function ChatChannelPage({
 
   if (!channel) notFound();
 
-  const [{ data: members }, { data: messages }, { data: allProfiles }] = await Promise.all([
-    supabase.from("chat_channel_members").select("channel_id, profiles(*)").eq("channel_id", id),
-    supabase
-      .from("chat_messages")
-      .select("*")
-      .eq("channel_id", id)
-      .order("created_at", { ascending: true })
-      .limit(200),
-    supabase.from("profiles").select("*"),
-  ]);
+  const [{ data: members }, { data: messages }, { data: allProfiles }, { data: currentProfile }] =
+    await Promise.all([
+      supabase.from("chat_channel_members").select("channel_id, profiles(*)").eq("channel_id", id),
+      supabase
+        .from("chat_messages")
+        .select("*")
+        .eq("channel_id", id)
+        .order("created_at", { ascending: true })
+        .limit(200),
+      supabase.from("profiles").select("*"),
+      supabase.from("profiles").select("department_id").eq("id", user.id).single(),
+    ]);
 
   const memberProfiles = (members ?? [])
     .map((m) => m.profiles as unknown as Profile)
@@ -53,6 +55,7 @@ export default async function ChatChannelPage({
     <ChatWindow
       channelId={id}
       currentUserId={user.id}
+      currentUserDepartmentId={currentProfile?.department_id ?? null}
       initialMessages={(messages as ChatMessage[]) ?? []}
       profilesById={profilesById}
       title={title}
