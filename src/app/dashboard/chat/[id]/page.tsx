@@ -58,6 +58,8 @@ export default async function ChatChannelPage({
       currentUserDepartmentId={currentProfile?.department_id ?? null}
       initialMessages={(messages as ChatMessage[]) ?? []}
       profilesById={profilesById}
+      memberProfiles={memberProfiles}
+      allProfiles={(allProfiles as Profile[]) ?? []}
       title={title}
     />
   );
