@@ -40,10 +40,16 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-sky-50">
+      <input type="checkbox" id="sidebar-toggle" className="peer hidden" />
+      <label
+        htmlFor="sidebar-toggle"
+        aria-hidden="true"
+        className="fixed inset-0 z-30 hidden bg-slate-900/40 peer-checked:block lg:!hidden"
+      />
       <Sidebar isAdmin={(profile as Profile).is_admin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar profile={profile as Profile} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );
