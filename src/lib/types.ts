@@ -1,3 +1,5 @@
+export type Role = "super_admin" | "admin" | "employee";
+
 export type Profile = {
   id: string;
   email: string;
@@ -8,6 +10,7 @@ export type Profile = {
   avatar_url: string | null;
   department_id: string | null;
   is_admin: boolean;
+  role: Role;
   created_at: string;
   // 0 = Sunday ... 6 = Saturday
   work_days: number[];
@@ -17,9 +20,53 @@ export type Profile = {
 
 export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+export const ROLE_LABELS: Record<Role, string> = {
+  super_admin: "Super Admin",
+  admin: "Admin",
+  employee: "Employee",
+};
+
 export type Department = {
   id: string;
   name: string;
+  parent_department_id: string | null;
+  created_at: string;
+};
+
+export type SpecialistProfile = {
+  profile_id: string;
+  specialization: string | null;
+  // 0 = Sunday ... 6 = Saturday
+  availability_days: number[];
+  availability_start_time: string | null;
+  availability_end_time: string | null;
+  updated_at: string;
+};
+
+export type SpecialistCertificate = {
+  id: string;
+  profile_id: string;
+  file_name: string;
+  file_url: string;
+  uploaded_by: string | null;
+  created_at: string;
+};
+
+export type ContentPost = {
+  id: string;
+  department_id: string;
+  created_by: string | null;
+  link_url: string;
+  title: string | null;
+  ai_summary: string | null;
+  ai_tone: string | null;
+  ai_topics: string[] | null;
+  ai_suggestions: string | null;
+  likes: number;
+  views: number;
+  comments: number;
+  shares: number;
+  posted_at: string;
   created_at: string;
 };
 
