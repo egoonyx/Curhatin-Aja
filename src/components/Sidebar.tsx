@@ -47,9 +47,8 @@ export default function Sidebar({
     >
       <div className="mb-8 flex items-center justify-between px-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500 text-sm font-semibold text-white">
-            CA
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Curhatin Aja" className="h-9 w-9 rounded-xl object-contain" />
           <span className="font-semibold text-slate-800">Curhatin Aja</span>
         </div>
         <label
