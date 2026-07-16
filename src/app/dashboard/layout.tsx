@@ -38,6 +38,17 @@ export default async function DashboardLayout({
     );
   }
 
+  const p = profile as Profile;
+  let showContent = p.role === "super_admin" || p.role === "admin";
+  if (!showContent && p.department_id) {
+    const { data: dept } = await supabase
+      .from("departments")
+      .select("name")
+      .eq("id", p.department_id)
+      .maybeSingle();
+    showContent = dept?.name === "Marketing";
+  }
+
   return (
     <div className="flex min-h-screen bg-sky-50">
       <input type="checkbox" id="sidebar-toggle" className="peer hidden" />
@@ -46,7 +57,7 @@ export default async function DashboardLayout({
         aria-hidden="true"
         className="fixed inset-0 z-30 hidden bg-slate-900/40 peer-checked:block lg:!hidden"
       />
-      <Sidebar isAdmin={(profile as Profile).is_admin} />
+      <Sidebar isAdmin={p.is_admin} showContent={showContent} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar profile={profile as Profile} />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
