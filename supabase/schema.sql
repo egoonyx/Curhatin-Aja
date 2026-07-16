@@ -51,6 +51,24 @@ create table if not exists public.tasks (
   updated_at timestamptz not null default now()
 );
 
+-- workflow upgrade: new task -> revision -> reviewing -> complete
+-- (collapses the old "in_progress" state into "todo" so existing rows stay valid)
+update public.tasks set status = 'todo' where status = 'in_progress';
+
+alter table public.tasks drop constraint if exists tasks_status_check;
+alter table public.tasks add constraint tasks_status_check
+  check (status in ('todo', 'revision', 'reviewing', 'done'));
+
+create table if not exists public.task_status_updates (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks (id) on delete cascade,
+  changed_by uuid references public.profiles (id) on delete set null,
+  from_status text,
+  to_status text not null,
+  note text,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.task_assignees (
   task_id uuid not null references public.tasks (id) on delete cascade,
   profile_id uuid not null references public.profiles (id) on delete cascade,
@@ -153,6 +171,7 @@ alter table public.tasks enable row level security;
 alter table public.task_assignees enable row level security;
 alter table public.task_comments enable row level security;
 alter table public.task_attachments enable row level security;
+alter table public.task_status_updates enable row level security;
 alter table public.attendance enable row level security;
 alter table public.chat_channels enable row level security;
 alter table public.chat_channel_members enable row level security;
@@ -267,6 +286,16 @@ drop policy if exists "task_attachments_delete" on public.task_attachments;
 create policy "task_attachments_delete" on public.task_attachments
   for delete to authenticated
   using (auth.uid() = uploaded_by or public.is_admin(auth.uid()));
+
+-- task_status_updates: workspace-wide visibility, like tasks themselves;
+-- only the person recording the change can insert their own row
+drop policy if exists "task_status_updates_select" on public.task_status_updates;
+create policy "task_status_updates_select" on public.task_status_updates
+  for select to authenticated using (true);
+
+drop policy if exists "task_status_updates_insert" on public.task_status_updates;
+create policy "task_status_updates_insert" on public.task_status_updates
+  for insert to authenticated with check (auth.uid() = changed_by);
 
 -- attendance: private to the employee and admins
 drop policy if exists "attendance_select" on public.attendance;
@@ -469,6 +498,50 @@ drop trigger if exists on_task_assignee_insert on public.task_assignees;
 create trigger on_task_assignee_insert
   after insert on public.task_assignees
   for each row execute function public.notify_task_assignee();
+
+-- task status changed -> notify assignees + the creator (except whoever made the change)
+create or replace function public.notify_task_status_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  recipient uuid;
+  actor uuid;
+  status_label text;
+begin
+  if new.status is not distinct from old.status then
+    return new;
+  end if;
+
+  actor := auth.uid();
+  status_label := replace(new.status, '_', ' ');
+
+  for recipient in
+    select profile_id from public.task_assignees where task_id = new.id
+    union
+    select new.created_by where new.created_by is not null
+  loop
+    if actor is null or recipient <> actor then
+      insert into public.notifications (profile_id, type, message, link)
+      values (
+        recipient,
+        'task_status_changed',
+        '"' || new.title || '" was moved to ' || status_label,
+        '/dashboard/tasks/' || new.id
+      );
+    end if;
+  end loop;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_task_status_change on public.tasks;
+create trigger on_task_status_change
+  after update of status on public.tasks
+  for each row execute function public.notify_task_status_change();
 
 -- added to a chat channel/DM -> notify the person added (not the creator)
 create or replace function public.notify_chat_member_added()
