@@ -82,6 +82,7 @@ export default async function TaskDetailPage({
 
       <TaskAttachments
         taskId={id}
+        departmentId={task.department_id}
         currentUserId={user.id}
         attachments={(attachments as TaskAttachment[]) ?? []}
         canDelete={canEdit}
