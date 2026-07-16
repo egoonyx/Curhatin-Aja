@@ -65,6 +65,15 @@ create table if not exists public.task_comments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.task_attachments (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks (id) on delete cascade,
+  uploaded_by uuid references public.profiles (id) on delete set null,
+  file_url text not null,
+  file_name text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.attendance (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles (id) on delete cascade,
@@ -143,6 +152,7 @@ alter table public.profiles enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_assignees enable row level security;
 alter table public.task_comments enable row level security;
+alter table public.task_attachments enable row level security;
 alter table public.attendance enable row level security;
 alter table public.chat_channels enable row level security;
 alter table public.chat_channel_members enable row level security;
@@ -243,6 +253,20 @@ drop policy if exists "task_comments_delete" on public.task_comments;
 create policy "task_comments_delete" on public.task_comments
   for delete to authenticated
   using (auth.uid() = profile_id or public.is_admin(auth.uid()));
+
+-- task_attachments: workspace-wide visibility, like tasks themselves
+drop policy if exists "task_attachments_select" on public.task_attachments;
+create policy "task_attachments_select" on public.task_attachments
+  for select to authenticated using (true);
+
+drop policy if exists "task_attachments_insert" on public.task_attachments;
+create policy "task_attachments_insert" on public.task_attachments
+  for insert to authenticated with check (auth.uid() = uploaded_by);
+
+drop policy if exists "task_attachments_delete" on public.task_attachments;
+create policy "task_attachments_delete" on public.task_attachments
+  for delete to authenticated
+  using (auth.uid() = uploaded_by or public.is_admin(auth.uid()));
 
 -- attendance: private to the employee and admins
 drop policy if exists "attendance_select" on public.attendance;
@@ -357,6 +381,10 @@ insert into storage.buckets (id, name, public)
 values ('chat-attachments', 'chat-attachments', true)
 on conflict (id) do nothing;
 
+insert into storage.buckets (id, name, public)
+values ('task-attachments', 'task-attachments', true)
+on conflict (id) do nothing;
+
 drop policy if exists "avatars_public_read" on storage.objects;
 create policy "avatars_public_read" on storage.objects
   for select using (bucket_id = 'avatars');
@@ -376,6 +404,18 @@ create policy "chat_attachments_public_read" on storage.objects
 drop policy if exists "chat_attachments_auth_write" on storage.objects;
 create policy "chat_attachments_auth_write" on storage.objects
   for insert to authenticated with check (bucket_id = 'chat-attachments');
+
+drop policy if exists "task_attachments_public_read" on storage.objects;
+create policy "task_attachments_public_read" on storage.objects
+  for select using (bucket_id = 'task-attachments');
+
+drop policy if exists "task_attachments_auth_write" on storage.objects;
+create policy "task_attachments_auth_write" on storage.objects
+  for insert to authenticated with check (bucket_id = 'task-attachments');
+
+drop policy if exists "task_attachments_auth_delete" on storage.objects;
+create policy "task_attachments_auth_delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'task-attachments');
 
 -- =========================================================
 -- NOTIFICATIONS
