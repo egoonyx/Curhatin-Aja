@@ -898,3 +898,337 @@ begin
   alter publication supabase_realtime add table public.notifications;
 exception when duplicate_object then null;
 end $$;
+
+-- =========================================================
+-- ROLE TIERS: super_admin (sees/manages everything) / admin
+-- (scoped to their own department) / employee. The old "is_admin"
+-- boolean is kept in sync automatically so every existing check
+-- across the app (files, tasks, meetings, etc.) keeps working exactly
+-- as before - both admin tiers still count as "is_admin" there.
+-- =========================================================
+
+alter table public.profiles add column if not exists role text not null default 'employee';
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles add constraint profiles_role_check
+  check (role in ('super_admin', 'admin', 'employee'));
+
+create or replace function public.sync_is_admin_from_role()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.is_admin := (new.role in ('admin', 'super_admin'));
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_sync_is_admin on public.profiles;
+create trigger profiles_sync_is_admin
+  before insert or update of role on public.profiles
+  for each row execute function public.sync_is_admin_from_role();
+
+-- one-time backfill: anyone already marked admin becomes a department-scoped Admin
+update public.profiles set role = 'admin' where is_admin = true and role = 'employee';
+
+-- promote the workspace owner to Super Admin
+update public.profiles set role = 'super_admin' where email = 'finance@brandrev.ai';
+
+create or replace function public.is_super_admin(uid uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce((select role = 'super_admin' from public.profiles where id = uid), false);
+$$;
+
+-- the single department a department-scoped Admin manages (their own),
+-- or null if they're a Super Admin or a regular employee
+create or replace function public.admin_department(uid uuid)
+returns uuid
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select case
+    when (select role from public.profiles where id = uid) = 'admin'
+      then (select department_id from public.profiles where id = uid)
+    else null
+  end;
+$$;
+
+-- true if uid is a department-scoped Admin whose own department is either
+-- dept_id itself, or dept_id's parent department (so a "People" Admin also
+-- oversees the "Specialists" - helpers/doctors - department underneath it)
+create or replace function public.admin_manages_department(uid uuid, dept_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles pr
+    join public.departments d on d.id = dept_id
+    where pr.id = uid
+      and pr.role = 'admin'
+      and (pr.department_id = dept_id or pr.department_id = d.parent_department_id)
+  );
+$$;
+
+-- department-scoped admin management: Admins can only manage profiles in
+-- their own department (or, for People, the Specialists department below
+-- it); Super Admins can manage anyone
+drop policy if exists "profiles_update" on public.profiles;
+create policy "profiles_update" on public.profiles
+  for update to authenticated
+  using (
+    auth.uid() = id
+    or public.is_super_admin(auth.uid())
+    or (department_id is not null and public.admin_manages_department(auth.uid(), department_id))
+  )
+  with check (
+    auth.uid() = id
+    or public.is_super_admin(auth.uid())
+    or (department_id is not null and public.admin_manages_department(auth.uid(), department_id))
+  );
+
+drop policy if exists "profiles_delete" on public.profiles;
+create policy "profiles_delete" on public.profiles
+  for delete to authenticated
+  using (
+    public.is_super_admin(auth.uid())
+    or (department_id is not null and public.admin_manages_department(auth.uid(), department_id))
+  );
+
+-- only Super Admins add/rename/remove departments themselves
+drop policy if exists "departments_write" on public.departments;
+create policy "departments_write" on public.departments
+  for all to authenticated
+  using (public.is_super_admin(auth.uid()))
+  with check (public.is_super_admin(auth.uid()));
+
+-- attendance: Super Admin sees everyone, department Admin sees only their
+-- own department (People admins also see Specialists), everyone else sees
+-- just their own record
+drop policy if exists "attendance_select" on public.attendance;
+create policy "attendance_select" on public.attendance
+  for select to authenticated
+  using (
+    auth.uid() = profile_id
+    or public.is_super_admin(auth.uid())
+    or exists (
+      select 1 from public.profiles pr
+      where pr.id = attendance.profile_id
+        and pr.department_id is not null
+        and public.admin_manages_department(auth.uid(), pr.department_id)
+    )
+  );
+
+drop policy if exists "attendance_update" on public.attendance;
+create policy "attendance_update" on public.attendance
+  for update to authenticated
+  using (
+    auth.uid() = profile_id
+    or public.is_super_admin(auth.uid())
+    or exists (
+      select 1 from public.profiles pr
+      where pr.id = attendance.profile_id
+        and pr.department_id is not null
+        and public.admin_manages_department(auth.uid(), pr.department_id)
+    )
+  );
+
+-- =========================================================
+-- CONTENT ANALYSIS (Marketing) - paste a link, get an AI read on it,
+-- plus manually-entered performance numbers; rolled up into weekly/
+-- monthly reports. Visible to the owning department's members and to
+-- any admin/super admin (for oversight); only admins/super admins can
+-- export the reports (enforced in the app, exporting has no separate
+-- write to the DB).
+-- =========================================================
+
+create table if not exists public.content_posts (
+  id uuid primary key default gen_random_uuid(),
+  department_id uuid not null references public.departments (id) on delete cascade,
+  created_by uuid references public.profiles (id) on delete set null,
+  link_url text not null,
+  title text,
+  ai_summary text,
+  ai_tone text,
+  ai_topics text[],
+  ai_suggestions text,
+  likes bigint not null default 0,
+  views bigint not null default 0,
+  comments bigint not null default 0,
+  shares bigint not null default 0,
+  posted_at date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+alter table public.content_posts enable row level security;
+
+drop policy if exists "content_posts_select" on public.content_posts;
+create policy "content_posts_select" on public.content_posts
+  for select to authenticated
+  using (
+    public.is_super_admin(auth.uid())
+    or department_id = (select department_id from public.profiles where id = auth.uid())
+    or public.admin_manages_department(auth.uid(), department_id)
+  );
+
+drop policy if exists "content_posts_insert" on public.content_posts;
+create policy "content_posts_insert" on public.content_posts
+  for insert to authenticated
+  with check (
+    auth.uid() = created_by
+    and department_id = (select department_id from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "content_posts_update" on public.content_posts;
+create policy "content_posts_update" on public.content_posts
+  for update to authenticated
+  using (
+    auth.uid() = created_by
+    or public.is_super_admin(auth.uid())
+    or public.admin_manages_department(auth.uid(), department_id)
+  );
+
+drop policy if exists "content_posts_delete" on public.content_posts;
+create policy "content_posts_delete" on public.content_posts
+  for delete to authenticated
+  using (
+    auth.uid() = created_by
+    or public.is_super_admin(auth.uid())
+    or public.admin_manages_department(auth.uid(), department_id)
+  );
+
+-- =========================================================
+-- SPECIALISTS (helpers / doctors / psychologists) - a department under
+-- People with extra biodata: specialization, weekly availability, and
+-- certificates. Directory only ever shows their name, specialization,
+-- WhatsApp, chat, and availability for this group - never other
+-- private info.
+-- =========================================================
+
+alter table public.departments add column if not exists parent_department_id uuid references public.departments (id) on delete set null;
+
+insert into public.departments (name)
+select 'Specialists'
+where not exists (select 1 from public.departments where name = 'Specialists');
+
+update public.departments
+set parent_department_id = (select id from public.departments where name = 'People')
+where name = 'Specialists'
+  and exists (select 1 from public.departments where name = 'People');
+
+create table if not exists public.specialist_profiles (
+  profile_id uuid primary key references public.profiles (id) on delete cascade,
+  specialization text,
+  availability_days smallint[] not null default '{}',
+  availability_start_time time,
+  availability_end_time time,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.specialist_profiles enable row level security;
+
+drop policy if exists "specialist_profiles_select" on public.specialist_profiles;
+create policy "specialist_profiles_select" on public.specialist_profiles
+  for select to authenticated using (true);
+
+drop policy if exists "specialist_profiles_write" on public.specialist_profiles;
+create policy "specialist_profiles_write" on public.specialist_profiles
+  for all to authenticated
+  using (
+    profile_id = auth.uid()
+    or public.is_super_admin(auth.uid())
+    or exists (
+      select 1 from public.profiles pr
+      where pr.id = specialist_profiles.profile_id
+        and pr.department_id is not null
+        and public.admin_manages_department(auth.uid(), pr.department_id)
+    )
+  )
+  with check (
+    profile_id = auth.uid()
+    or public.is_super_admin(auth.uid())
+    or exists (
+      select 1 from public.profiles pr
+      where pr.id = specialist_profiles.profile_id
+        and pr.department_id is not null
+        and public.admin_manages_department(auth.uid(), pr.department_id)
+    )
+  );
+
+create table if not exists public.specialist_certificates (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  file_name text not null,
+  file_url text not null,
+  uploaded_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.specialist_certificates enable row level security;
+
+drop policy if exists "specialist_certificates_select" on public.specialist_certificates;
+create policy "specialist_certificates_select" on public.specialist_certificates
+  for select to authenticated
+  using (
+    profile_id = auth.uid()
+    or public.is_super_admin(auth.uid())
+    or exists (
+      select 1 from public.profiles pr
+      where pr.id = specialist_certificates.profile_id
+        and pr.department_id is not null
+        and public.admin_manages_department(auth.uid(), pr.department_id)
+    )
+  );
+
+drop policy if exists "specialist_certificates_insert" on public.specialist_certificates;
+create policy "specialist_certificates_insert" on public.specialist_certificates
+  for insert to authenticated
+  with check (
+    profile_id = auth.uid()
+    or public.is_super_admin(auth.uid())
+    or exists (
+      select 1 from public.profiles pr
+      where pr.id = specialist_certificates.profile_id
+        and pr.department_id is not null
+        and public.admin_manages_department(auth.uid(), pr.department_id)
+    )
+  );
+
+drop policy if exists "specialist_certificates_delete" on public.specialist_certificates;
+create policy "specialist_certificates_delete" on public.specialist_certificates
+  for delete to authenticated
+  using (
+    profile_id = auth.uid()
+    or public.is_super_admin(auth.uid())
+    or exists (
+      select 1 from public.profiles pr
+      where pr.id = specialist_certificates.profile_id
+        and pr.department_id is not null
+        and public.admin_manages_department(auth.uid(), pr.department_id)
+    )
+  );
+
+insert into storage.buckets (id, name, public)
+values ('certificates', 'certificates', true)
+on conflict (id) do nothing;
+
+drop policy if exists "certificates_public_read" on storage.objects;
+create policy "certificates_public_read" on storage.objects
+  for select using (bucket_id = 'certificates');
+
+drop policy if exists "certificates_auth_write" on storage.objects;
+create policy "certificates_auth_write" on storage.objects
+  for insert to authenticated with check (bucket_id = 'certificates');
+
+drop policy if exists "certificates_auth_delete" on storage.objects;
+create policy "certificates_auth_delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'certificates');
