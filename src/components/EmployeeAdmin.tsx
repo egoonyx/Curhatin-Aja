@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
+import WorkScheduleEditor from "@/components/WorkScheduleEditor";
 import type { Department, Profile } from "@/lib/types";
 
 export default function EmployeeAdmin({
@@ -35,11 +36,12 @@ export default function EmployeeAdmin({
     <div className="card p-5">
       <h2 className="mb-3 text-sm font-semibold text-slate-700">Employees</h2>
       <div className="-mx-5 overflow-x-auto px-5">
-      <table className="w-full min-w-[480px] text-left text-sm">
+      <table className="w-full min-w-[620px] text-left text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wide text-slate-400">
             <th className="pb-2">Name</th>
             <th className="pb-2">Department</th>
+            <th className="pb-2">Schedule</th>
             <th className="pb-2">Admin</th>
           </tr>
         </thead>
@@ -68,6 +70,14 @@ export default function EmployeeAdmin({
                     </option>
                   ))}
                 </select>
+              </td>
+              <td className="py-2">
+                <WorkScheduleEditor
+                  profileId={p.id}
+                  initialWorkDays={p.work_days}
+                  initialStartTime={p.work_start_time}
+                  initialEndTime={p.work_end_time}
+                />
               </td>
               <td className="py-2">
                 <input

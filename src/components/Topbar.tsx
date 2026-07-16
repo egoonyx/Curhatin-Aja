@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
+import NotificationBell from "@/components/NotificationBell";
 import type { Profile } from "@/lib/types";
 
 export default function Topbar({ profile }: { profile: Profile }) {
@@ -26,6 +27,7 @@ export default function Topbar({ profile }: { profile: Profile }) {
         ☰
       </label>
       <div className="flex items-center gap-2 sm:gap-4">
+        <NotificationBell currentUserId={profile.id} />
         <Link
           href="/dashboard/profile"
           className="flex items-center gap-2 rounded-xl px-2 py-1 hover:bg-sky-50"
