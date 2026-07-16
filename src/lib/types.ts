@@ -23,7 +23,7 @@ export type Department = {
   created_at: string;
 };
 
-export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskStatus = "todo" | "revision" | "reviewing" | "done";
 export type TaskPriority = "low" | "normal" | "high";
 
 export type Task = {
@@ -58,6 +58,16 @@ export type TaskComment = {
   task_id: string;
   profile_id: string;
   body: string;
+  created_at: string;
+};
+
+export type TaskStatusUpdate = {
+  id: string;
+  task_id: string;
+  changed_by: string | null;
+  from_status: TaskStatus | null;
+  to_status: TaskStatus;
+  note: string | null;
   created_at: string;
 };
 
