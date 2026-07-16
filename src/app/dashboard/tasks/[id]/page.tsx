@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import TaskDetail from "@/components/TaskDetail";
 import TaskComments from "@/components/TaskComments";
 import TaskAttachments from "@/components/TaskAttachments";
-import type { Profile, Task, TaskAttachment, TaskComment } from "@/lib/types";
+import TaskStatusHistory from "@/components/TaskStatusHistory";
+import type { Profile, Task, TaskAttachment, TaskComment, TaskStatusUpdate } from "@/lib/types";
 
 export default async function TaskDetailPage({
   params,
@@ -26,19 +27,25 @@ export default async function TaskDetailPage({
 
   if (!task) notFound();
 
-  const [{ data: assigneeRows }, { data: comments }, { data: attachments }] = await Promise.all([
-    supabase.from("task_assignees").select("profiles(*)").eq("task_id", id),
-    supabase
-      .from("task_comments")
-      .select("*")
-      .eq("task_id", id)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("task_attachments")
-      .select("*")
-      .eq("task_id", id)
-      .order("created_at", { ascending: false }),
-  ]);
+  const [{ data: assigneeRows }, { data: comments }, { data: attachments }, { data: statusUpdates }] =
+    await Promise.all([
+      supabase.from("task_assignees").select("profiles(*)").eq("task_id", id),
+      supabase
+        .from("task_comments")
+        .select("*")
+        .eq("task_id", id)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("task_attachments")
+        .select("*")
+        .eq("task_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("task_status_updates")
+        .select("*")
+        .eq("task_id", id)
+        .order("created_at", { ascending: false }),
+    ]);
 
   const assignees = (assigneeRows ?? [])
     .map((r) => r.profiles as unknown as Profile)
@@ -70,6 +77,7 @@ export default async function TaskDetailPage({
         canEdit={canEdit}
         allProfiles={(allProfiles as Profile[]) ?? []}
         assignees={assignees}
+        currentUserId={user.id}
       />
 
       <TaskAttachments
@@ -77,6 +85,11 @@ export default async function TaskDetailPage({
         currentUserId={user.id}
         attachments={(attachments as TaskAttachment[]) ?? []}
         canDelete={canEdit}
+      />
+
+      <TaskStatusHistory
+        updates={(statusUpdates as TaskStatusUpdate[]) ?? []}
+        profilesById={profilesById}
       />
 
       <TaskComments
