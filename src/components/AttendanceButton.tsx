@@ -3,26 +3,34 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatTime } from "@/lib/utils";
+import { DAY_LABELS } from "@/lib/types";
 import type { Attendance } from "@/lib/types";
-
-const LATE_CUTOFF_HOUR = 9;
 
 export default function AttendanceButton({
   profileId,
   initialAttendance,
+  workDays,
+  workStartTime,
 }: {
   profileId: string;
   initialAttendance: Attendance | null;
+  workDays: number[];
+  workStartTime: string;
 }) {
   const [attendance, setAttendance] = useState(initialAttendance);
   const [loading, setLoading] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  const now0 = new Date();
+  const today = now0.toISOString().slice(0, 10);
+  const isScheduledToday = (workDays ?? []).includes(now0.getDay());
+  const [startHour, startMinute] = (workStartTime ?? "09:00").split(":").map(Number);
 
   async function handleCheckIn() {
     setLoading(true);
     const supabase = createClient();
     const now = new Date();
-    const status = now.getHours() >= LATE_CUTOFF_HOUR ? "late" : "present";
+    const cutoff = new Date(now);
+    cutoff.setHours(startHour, startMinute, 0, 0);
+    const status = now.getTime() > cutoff.getTime() ? "late" : "present";
 
     const { data, error } = await supabase
       .from("attendance")
@@ -74,6 +82,14 @@ export default function AttendanceButton({
     return (
       <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
         Marked as leave today{attendance.note ? `: ${attendance.note}` : ""}.
+      </div>
+    );
+  }
+
+  if (!isScheduledToday && !attendance?.check_in) {
+    return (
+      <div className="rounded-xl bg-sky-50 px-4 py-3 text-sm text-slate-500">
+        You&apos;re not scheduled to work on {DAY_LABELS[now0.getDay()]}s. Enjoy your day off!
       </div>
     );
   }
