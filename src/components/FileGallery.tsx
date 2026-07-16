@@ -240,15 +240,15 @@ export default function FileGallery({
       </div>
 
       {tab === "department" && currentFolder && (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex min-w-0 items-center gap-2 text-sm">
           <button
             onClick={() => setCurrentFolder(null)}
-            className="font-medium text-sky-600 hover:underline"
+            className="shrink-0 font-medium text-sky-600 hover:underline"
           >
             ← All files
           </button>
-          <span className="text-slate-300">/</span>
-          <span className="font-medium text-slate-600">📁 {currentFolder.name}</span>
+          <span className="shrink-0 text-slate-300">/</span>
+          <span className="truncate font-medium text-slate-600">📁 {currentFolder.name}</span>
         </div>
       )}
 
