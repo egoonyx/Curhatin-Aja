@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import ScheduleMeetingModal from "@/components/ScheduleMeetingModal";
 import { cn, formatDateTime } from "@/lib/utils";
@@ -29,17 +30,32 @@ function startOfMonth(d: Date) {
 
 export default function CalendarView({
   currentUserId,
+  isAdmin = false,
   allProfiles,
   meetings,
 }: {
   currentUserId: string;
+  isAdmin?: boolean;
   allProfiles: Profile[];
   meetings: MeetingWithContext[];
 }) {
+  const router = useRouter();
   const [scheduling, setScheduling] = useState(false);
   const [view, setView] = useState<"month" | "list">("month");
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this meeting? This can't be undone.")) return;
+    setDeletingId(id);
+    try {
+      await fetch(`/api/meetings/${id}`, { method: "DELETE" });
+    } finally {
+      setDeletingId(null);
+      router.refresh();
+    }
+  }
 
   const now = Date.now();
   const upcoming = meetings.filter((m) => new Date(m.start_time).getTime() >= now);
@@ -198,7 +214,13 @@ export default function CalendarView({
               </h3>
               <div className="space-y-3">
                 {selectedDayMeetings.map((m) => (
-                  <MeetingRow key={m.id} meeting={m} />
+                  <MeetingRow
+                    key={m.id}
+                    meeting={m}
+                    canDelete={isAdmin || m.created_by === currentUserId}
+                    deleting={deletingId === m.id}
+                    onDelete={() => handleDelete(m.id)}
+                  />
                 ))}
                 {selectedDayMeetings.length === 0 && (
                   <p className="text-sm text-slate-400">No meetings this day.</p>
@@ -213,7 +235,13 @@ export default function CalendarView({
             <h2 className="mb-3 text-sm font-semibold text-slate-700">Upcoming</h2>
             <div className="space-y-3">
               {upcoming.map((m) => (
-                <MeetingRow key={m.id} meeting={m} />
+                <MeetingRow
+                  key={m.id}
+                  meeting={m}
+                  canDelete={isAdmin || m.created_by === currentUserId}
+                  deleting={deletingId === m.id}
+                  onDelete={() => handleDelete(m.id)}
+                />
               ))}
               {upcoming.length === 0 && (
                 <p className="text-sm text-slate-400">No upcoming meetings.</p>
@@ -226,7 +254,13 @@ export default function CalendarView({
               <h2 className="mb-3 text-sm font-semibold text-slate-700">Past</h2>
               <div className="space-y-3">
                 {past.map((m) => (
-                  <MeetingRow key={m.id} meeting={m} />
+                  <MeetingRow
+                    key={m.id}
+                    meeting={m}
+                    canDelete={isAdmin || m.created_by === currentUserId}
+                    deleting={deletingId === m.id}
+                    onDelete={() => handleDelete(m.id)}
+                  />
                 ))}
               </div>
             </section>
@@ -246,7 +280,17 @@ export default function CalendarView({
   );
 }
 
-function MeetingRow({ meeting }: { meeting: MeetingWithContext }) {
+function MeetingRow({
+  meeting,
+  canDelete,
+  deleting,
+  onDelete,
+}: {
+  meeting: MeetingWithContext;
+  canDelete?: boolean;
+  deleting?: boolean;
+  onDelete?: () => void;
+}) {
   const linkHref = meeting.task_id
     ? `/dashboard/tasks/${meeting.task_id}`
     : meeting.channel_id
@@ -288,6 +332,16 @@ function MeetingRow({ meeting }: { meeting: MeetingWithContext }) {
           <Link href={linkHref} className="text-xs text-sky-600 hover:underline">
             View {meeting.task_id ? "task" : "chat"}
           </Link>
+        )}
+        {canDelete && onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="text-xs text-slate-400 hover:text-red-500 disabled:opacity-50"
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
         )}
       </div>
     </div>
