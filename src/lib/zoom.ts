@@ -38,6 +38,24 @@ async function getZoomAccessToken(): Promise<string | null> {
   }
 }
 
+export async function deleteZoomMeeting(zoomMeetingId: string): Promise<boolean> {
+  const token = await getZoomAccessToken();
+  if (!token) return false;
+
+  try {
+    const res = await fetch(`${ZOOM_BASE}/meetings/${zoomMeetingId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    // Zoom returns 204 on success; treat "already gone" (404) as success too.
+    return res.ok || res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
 export async function createZoomMeeting({
   topic,
   startTime,
