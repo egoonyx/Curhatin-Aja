@@ -959,6 +959,11 @@ as $$
   end;
 $$;
 
+-- department hierarchy: lets a "People" Admin also manage the "Specialists"
+-- department underneath it. Added here (before admin_manages_department)
+-- since that function references this column.
+alter table public.departments add column if not exists parent_department_id uuid references public.departments (id) on delete set null;
+
 -- true if uid is a department-scoped Admin whose own department is either
 -- dept_id itself, or dept_id's parent department (so a "People" Admin also
 -- oversees the "Specialists" - helpers/doctors - department underneath it)
@@ -1232,3 +1237,92 @@ create policy "certificates_auth_write" on storage.objects
 drop policy if exists "certificates_auth_delete" on storage.objects;
 create policy "certificates_auth_delete" on storage.objects
   for delete to authenticated using (bucket_id = 'certificates');
+
+-- =========================================================
+-- FILE FOLDERS: lets a department organize its Files gallery into
+-- folders (one level deep). A file with folder_id = null sits at the
+-- department's root; deleting a folder cascades to the files inside it.
+-- =========================================================
+
+create table if not exists public.file_folders (
+  id uuid primary key default gen_random_uuid(),
+  department_id uuid not null references public.departments (id) on delete cascade,
+  name text not null,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.files add column if not exists folder_id uuid references public.file_folders (id) on delete cascade;
+
+alter table public.file_folders enable row level security;
+
+drop policy if exists "file_folders_select" on public.file_folders;
+create policy "file_folders_select" on public.file_folders
+  for select to authenticated
+  using (
+    public.is_admin(auth.uid())
+    or department_id = (select department_id from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "file_folders_insert" on public.file_folders;
+create policy "file_folders_insert" on public.file_folders
+  for insert to authenticated
+  with check (
+    auth.uid() = created_by
+    and department_id = (select department_id from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "file_folders_delete" on public.file_folders;
+create policy "file_folders_delete" on public.file_folders
+  for delete to authenticated
+  using (auth.uid() = created_by or public.is_admin(auth.uid()));
+
+-- =========================================================
+-- ACCOUNT DELETION: a Super Admin can remove anyone (except themselves);
+-- a department Admin can remove an Employee within a department they
+-- manage. Deleting the auth.users row cascades to profiles and
+-- everything referencing it (tasks, attendance, files, chat, etc.)
+-- since profiles.id references auth.users(id) on delete cascade.
+-- =========================================================
+
+create or replace function public.admin_delete_profile(target_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  caller_role text;
+  target_role text;
+  target_dept uuid;
+begin
+  if target_id = auth.uid() then
+    raise exception 'You cannot delete your own account here.';
+  end if;
+
+  select role into caller_role from public.profiles where id = auth.uid();
+  select role, department_id into target_role, target_dept
+    from public.profiles where id = target_id;
+
+  if caller_role is null then
+    raise exception 'Not authorized.';
+  end if;
+
+  if caller_role = 'super_admin' then
+    -- a Super Admin can remove anyone else
+    null;
+  elsif caller_role = 'admin'
+    and target_role = 'employee'
+    and target_dept is not null
+    and public.admin_manages_department(auth.uid(), target_dept) then
+    -- a department Admin can remove an Employee in a department they manage
+    null;
+  else
+    raise exception 'Not authorized to delete this account.';
+  end if;
+
+  delete from auth.users where id = target_id;
+end;
+$$;
+
+grant execute on function public.admin_delete_profile(uuid) to authenticated;
