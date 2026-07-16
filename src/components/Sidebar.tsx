@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/departments", label: "Departments", icon: "🗂️" },
   { href: "/dashboard/tasks", label: "My Tasks", icon: "✅" },
   { href: "/dashboard/files", label: "Files", icon: "🗃️" },
+  { href: "/dashboard/calendar", label: "Calendar", icon: "📅" },
   { href: "/dashboard/chat", label: "Chat", icon: "💬" },
   { href: "/dashboard/directory", label: "Directory", icon: "👥" },
 ];

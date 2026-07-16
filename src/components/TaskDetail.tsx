@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
+import ScheduleMeetingModal from "@/components/ScheduleMeetingModal";
 import { cn } from "@/lib/utils";
 import type { Profile, Task, TaskPriority, TaskStatus } from "@/lib/types";
 
@@ -42,6 +43,7 @@ export default function TaskDetail({
   const [addingId, setAddingId] = useState("");
   const [statusNote, setStatusNote] = useState("");
   const [changingStatus, setChangingStatus] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
 
   async function handleStatusChange(status: TaskStatus) {
     if (status === task.status) return;
@@ -152,11 +154,16 @@ export default function TaskDetail({
           <div>
             <div className="flex items-start justify-between gap-4">
               <h1 className="text-lg font-semibold text-slate-800">{task.title}</h1>
-              {canEdit && (
-                <button className="btn-ghost" onClick={() => setEditing(true)}>
-                  Edit
+              <div className="flex shrink-0 gap-2">
+                <button className="btn-secondary text-xs" onClick={() => setScheduling(true)}>
+                  📅 Schedule meeting
                 </button>
-              )}
+                {canEdit && (
+                  <button className="btn-ghost" onClick={() => setEditing(true)}>
+                    Edit
+                  </button>
+                )}
+              </div>
             </div>
             {task.description && (
               <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
@@ -252,6 +259,16 @@ export default function TaskDetail({
           </div>
         )}
       </div>
+
+      {scheduling && (
+        <ScheduleMeetingModal
+          taskId={task.id}
+          currentUserId={currentUserId}
+          defaultAttendees={assignees}
+          allProfiles={allProfiles}
+          onClose={() => setScheduling(false)}
+        />
+      )}
     </div>
   );
 }

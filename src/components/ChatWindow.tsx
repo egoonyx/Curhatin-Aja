@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import GalleryPicker from "@/components/GalleryPicker";
+import ScheduleMeetingModal from "@/components/ScheduleMeetingModal";
 import { formatDateTime } from "@/lib/utils";
 import type { ChatMessage, GalleryFile, Profile } from "@/lib/types";
 
@@ -13,6 +14,8 @@ export default function ChatWindow({
   currentUserDepartmentId,
   initialMessages,
   profilesById,
+  memberProfiles,
+  allProfiles,
   title,
 }: {
   channelId: string;
@@ -21,6 +24,10 @@ export default function ChatWindow({
   currentUserDepartmentId?: string | null;
   initialMessages: ChatMessage[];
   profilesById: Record<string, Profile>;
+  /** Members of this channel/DM, used to pre-fill meeting attendees. */
+  memberProfiles?: Profile[];
+  /** Everyone else that can be added as a meeting attendee. */
+  allProfiles?: Profile[];
   title: string;
 }) {
   const [messages, setMessages] = useState(initialMessages);
@@ -28,6 +35,7 @@ export default function ChatWindow({
   const [file, setFile] = useState<File | null>(null);
   const [galleryAttachment, setGalleryAttachment] = useState<GalleryFile | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -131,7 +139,14 @@ export default function ChatWindow({
         >
           ☰
         </label>
-        <h2 className="truncate font-medium text-slate-800">{title}</h2>
+        <h2 className="flex-1 truncate font-medium text-slate-800">{title}</h2>
+        <button
+          type="button"
+          onClick={() => setScheduling(true)}
+          className="btn-secondary shrink-0 text-xs"
+        >
+          📅 Schedule
+        </button>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
@@ -229,6 +244,16 @@ export default function ChatWindow({
           currentUserId={currentUserId}
           onSelect={handleGallerySelect}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {scheduling && (
+        <ScheduleMeetingModal
+          channelId={channelId}
+          currentUserId={currentUserId}
+          defaultAttendees={(memberProfiles ?? []).filter((p) => p.id !== currentUserId)}
+          allProfiles={allProfiles ?? memberProfiles ?? []}
+          onClose={() => setScheduling(false)}
         />
       )}
     </div>
