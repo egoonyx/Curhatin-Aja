@@ -44,6 +44,15 @@ export type TaskAssignee = {
   profile_id: string;
 };
 
+export type TaskAttachment = {
+  id: string;
+  task_id: string;
+  uploaded_by: string | null;
+  file_url: string;
+  file_name: string;
+  created_at: string;
+};
+
 export type TaskComment = {
   id: string;
   task_id: string;
