@@ -8,10 +8,14 @@ import type { Profile } from "@/lib/types";
 
 export default function NewTaskModal({
   departmentId,
+  departments,
   profiles,
   currentUserId,
 }: {
-  departmentId: string;
+  /** Fixed department (e.g. when opened from a department's own page). */
+  departmentId?: string;
+  /** Pass this instead of departmentId to let the user pick a department (e.g. from My Tasks). */
+  departments?: { id: string; name: string }[];
   profiles: Profile[];
   currentUserId: string;
 }) {
@@ -25,6 +29,19 @@ export default function NewTaskModal({
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState("normal");
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState(
+    departmentId ?? departments?.[0]?.id ?? ""
+  );
+
+  function handleFilesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setFiles((prev) => [...prev, ...Array.from(e.target.files ?? [])]);
+    e.target.value = "";
+  }
+
+  function removeFile(name: string) {
+    setFiles((prev) => prev.filter((f) => f.name !== name));
+  }
 
   function toggleAssignee(id: string) {
     setAssigneeIds((prev) =>
@@ -38,11 +55,18 @@ export default function NewTaskModal({
     setDeadline("");
     setPriority("normal");
     setAssigneeIds([]);
+    setFiles([]);
+    setSelectedDepartmentId(departmentId ?? departments?.[0]?.id ?? "");
     setError(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const targetDepartmentId = departmentId ?? selectedDepartmentId;
+    if (!targetDepartmentId) {
+      setError("Please choose a department for this task.");
+      return;
+    }
     setLoading(true);
     setError(null);
     const supabase = createClient();
@@ -52,7 +76,7 @@ export default function NewTaskModal({
       .insert({
         title,
         description: description || null,
-        department_id: departmentId,
+        department_id: targetDepartmentId,
         created_by: currentUserId,
         deadline: deadline ? new Date(deadline).toISOString() : null,
         priority,
@@ -70,6 +94,23 @@ export default function NewTaskModal({
       await supabase
         .from("task_assignees")
         .insert(assigneeIds.map((profile_id) => ({ task_id: task.id, profile_id })));
+    }
+
+    for (const file of files) {
+      const path = `${task.id}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("task-attachments")
+        .upload(path, file);
+      if (!uploadError) {
+        const fileUrl = supabase.storage.from("task-attachments").getPublicUrl(path).data
+          .publicUrl;
+        await supabase.from("task_attachments").insert({
+          task_id: task.id,
+          uploaded_by: currentUserId,
+          file_url: fileUrl,
+          file_name: file.name,
+        });
+      }
     }
 
     setLoading(false);
@@ -117,6 +158,27 @@ export default function NewTaskModal({
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
+
+              {!departmentId && departments && (
+                <div>
+                  <label className="label">Department</label>
+                  <select
+                    required
+                    className="input"
+                    value={selectedDepartmentId}
+                    onChange={(e) => setSelectedDepartmentId(e.target.value)}
+                  >
+                    <option value="" disabled>
+                      Choose a department
+                    </option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -166,6 +228,33 @@ export default function NewTaskModal({
                     </label>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label className="label">Related files</label>
+                <label className="btn-secondary inline-block cursor-pointer text-xs">
+                  + Add file
+                  <input type="file" multiple className="hidden" onChange={handleFilesChange} />
+                </label>
+                {files.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {files.map((f) => (
+                      <li
+                        key={f.name}
+                        className="flex items-center justify-between rounded-lg bg-sky-50 px-3 py-1.5 text-xs text-slate-600"
+                      >
+                        <span className="truncate">📎 {f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(f.name)}
+                          className="ml-2 shrink-0 text-slate-400 hover:text-red-500"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               {error && (
