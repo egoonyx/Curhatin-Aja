@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { fetchAssigneesMap } from "@/lib/tasks";
 import TaskBoard from "@/components/TaskBoard";
-import type { Task } from "@/lib/types";
+import NewTaskModal from "@/components/NewTaskModal";
+import type { Profile, Task } from "@/lib/types";
 
 export default async function MyTasksPage() {
   const supabase = await createClient();
@@ -10,11 +11,12 @@ export default async function MyTasksPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: assignedRows }, { data: createdRows }, { data: departments }] =
+  const [{ data: assignedRows }, { data: createdRows }, { data: departments }, { data: allProfiles }] =
     await Promise.all([
       supabase.from("task_assignees").select("tasks(*)").eq("profile_id", user.id),
       supabase.from("tasks").select("*").eq("created_by", user.id),
-      supabase.from("departments").select("id, name"),
+      supabase.from("departments").select("id, name").order("name"),
+      supabase.from("profiles").select("*").order("full_name"),
     ]);
 
   const byId = new Map<string, Task>();
@@ -37,11 +39,18 @@ export default async function MyTasksPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-800">My Tasks</h1>
-        <p className="text-sm text-slate-500">
-          Everything assigned to you or created by you, across every department.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-800">My Tasks</h1>
+          <p className="text-sm text-slate-500">
+            Everything assigned to you or created by you, across every department.
+          </p>
+        </div>
+        <NewTaskModal
+          departments={departments ?? []}
+          profiles={(allProfiles as Profile[]) ?? []}
+          currentUserId={user.id}
+        />
       </div>
 
       {tasks.length === 0 ? (
