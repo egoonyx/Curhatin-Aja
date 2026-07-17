@@ -1326,3 +1326,53 @@ end;
 $$;
 
 grant execute on function public.admin_delete_profile(uuid) to authenticated;
+
+-- =========================================================
+-- WEB PUSH: lets a profile register one or more browser/phone push
+-- subscriptions (one per device/browser they've enabled notifications on).
+-- Delivery itself happens server-side (Next.js API route using the
+-- web-push library + VAPID keys); this table just stores what to push to.
+-- =========================================================
+
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.push_subscriptions enable row level security;
+
+drop policy if exists "push_subscriptions_select_own" on public.push_subscriptions;
+create policy "push_subscriptions_select_own" on public.push_subscriptions
+  for select to authenticated
+  using (profile_id = auth.uid());
+
+drop policy if exists "push_subscriptions_insert_own" on public.push_subscriptions;
+create policy "push_subscriptions_insert_own" on public.push_subscriptions
+  for insert to authenticated
+  with check (profile_id = auth.uid());
+
+drop policy if exists "push_subscriptions_delete_own" on public.push_subscriptions;
+create policy "push_subscriptions_delete_own" on public.push_subscriptions
+  for delete to authenticated
+  using (profile_id = auth.uid());
+
+-- lets the /api/push/notify route (running as whichever signed-in user
+-- triggered the notification, e.g. a chat sender or task creator) look up
+-- push subscriptions belonging to OTHER profiles so it can deliver to them -
+-- normal RLS above only lets someone see their own rows.
+create or replace function public.get_push_subscriptions_for(target_ids uuid[])
+returns table(profile_id uuid, endpoint text, p256dh text, auth text)
+language sql
+security definer
+set search_path = public
+as $$
+  select profile_id, endpoint, p256dh, auth
+  from public.push_subscriptions
+  where profile_id = any(target_ids);
+$$;
+
+grant execute on function public.get_push_subscriptions_for(uuid[]) to authenticated;
