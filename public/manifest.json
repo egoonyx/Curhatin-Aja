@@ -1,0 +1,23 @@
+{
+  "name": "Curhatin Aja",
+  "short_name": "Curhatin Aja",
+  "description": "Internal workspace for Curhatin Aja - attendance, tasks, and team chat.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/logo-transparent.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-transparent.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
