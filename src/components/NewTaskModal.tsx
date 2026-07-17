@@ -109,6 +109,17 @@ export default function NewTaskModal({
       await supabase
         .from("task_assignees")
         .insert(assigneeIds.map((profile_id) => ({ task_id: task.id, profile_id })));
+
+      fetch("/api/push/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileIds: assigneeIds,
+          title: "New task assigned",
+          body: title,
+          url: `/dashboard/tasks/${task.id}`,
+        }),
+      }).catch(() => {});
     }
 
     for (const file of files) {

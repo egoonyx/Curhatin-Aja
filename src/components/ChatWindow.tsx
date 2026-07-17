@@ -117,6 +117,23 @@ export default function ChatWindow({
       gallery_file_id: galleryFileId,
     });
 
+    const recipientIds = (memberProfiles ?? [])
+      .filter((p) => p.id !== currentUserId)
+      .map((p) => p.id);
+    if (recipientIds.length > 0) {
+      const senderName = profilesById[currentUserId]?.full_name ?? "Someone";
+      fetch("/api/push/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileIds: recipientIds,
+          title: title || senderName,
+          body: body.trim() ? `${senderName}: ${body.trim()}` : `${senderName} sent an attachment`,
+          url: "/dashboard/chat",
+        }),
+      }).catch(() => {});
+    }
+
     setBody("");
     setFile(null);
     setGalleryAttachment(null);

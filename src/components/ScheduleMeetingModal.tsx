@@ -101,6 +101,17 @@ export default function ScheduleMeetingModal({
           profile_id,
         }))
       );
+
+      fetch("/api/push/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileIds: uniqueAttendeeIds,
+          title: "Meeting scheduled",
+          body: `${title} - ${startTime.toLocaleString()}`,
+          url: "/dashboard/calendar",
+        }),
+      }).catch(() => {});
     }
 
     try {
