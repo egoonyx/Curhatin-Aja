@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import ProfileEditForm from "@/components/ProfileEditForm";
 import AccountSecurityForm from "@/components/AccountSecurityForm";
+import PushNotificationToggle from "@/components/PushNotificationToggle";
 import SpecialistFields from "@/components/SpecialistFields";
 import type {
   Department,
@@ -49,6 +50,8 @@ export default async function ProfilePage() {
         <p className="text-sm text-slate-500">Keep your role and contact info up to date.</p>
       </div>
       <ProfileEditForm profile={p} departments={allDepartments} />
+
+      <PushNotificationToggle currentUserId={user.id} />
 
       {isSpecialist && (
         <SpecialistFields
