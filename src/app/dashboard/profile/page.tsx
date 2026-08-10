@@ -51,7 +51,7 @@ export default async function ProfilePage() {
       </div>
       <ProfileEditForm profile={p} departments={allDepartments} />
 
-      <PushNotificationToggle currentUserId={user.id} />
+      <PushNotificationToggle currentUserId={user.id} initialNotifyEmail={p.notify_email} />
 
       {isSpecialist && (
         <SpecialistFields
