@@ -54,8 +54,8 @@ export default async function CalendarPage() {
       <div>
         <h1 className="text-xl font-semibold text-slate-800">Calendar</h1>
         <p className="text-sm text-slate-500">
-          Meetings scheduled from tasks, chats, or on their own - with a Zoom link when
-          connected.
+          Meetings scheduled from tasks, chats, or on their own - with a Google Meet link
+          when connected.
         </p>
       </div>
 
