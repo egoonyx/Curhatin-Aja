@@ -16,6 +16,8 @@ export type Profile = {
   work_days: number[];
   work_start_time: string;
   work_end_time: string;
+  notify_push: boolean;
+  notify_email: boolean;
 };
 
 export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
