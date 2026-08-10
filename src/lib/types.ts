@@ -159,6 +159,8 @@ export type Meeting = {
   zoom_join_url: string | null;
   zoom_start_url: string | null;
   zoom_meeting_id: string | null;
+  meet_join_url: string | null;
+  meet_event_id: string | null;
   created_at: string;
 };
 
