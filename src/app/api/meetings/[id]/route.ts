@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { deleteZoomMeeting, isZoomConfigured } from "@/lib/zoom";
+import { deleteGoogleMeetEvent, isGoogleMeetConfigured } from "@/lib/googleMeet";
 
 export async function DELETE(
   _req: Request,
@@ -37,6 +38,9 @@ export async function DELETE(
     return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   }
 
+  if (meeting.meet_event_id && isGoogleMeetConfigured()) {
+    await deleteGoogleMeetEvent(meeting.meet_event_id);
+  }
   if (meeting.zoom_meeting_id && isZoomConfigured()) {
     await deleteZoomMeeting(meeting.zoom_meeting_id);
   }
