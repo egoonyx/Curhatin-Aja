@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { isPushConfigured, sendPushToProfiles } from "@/lib/push";
+import { notifyProfiles } from "@/lib/notify";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -10,10 +10,6 @@ export async function POST(req: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-  }
-
-  if (!isPushConfigured()) {
-    return NextResponse.json({ skipped: true, reason: "Push not configured" });
   }
 
   const { profileIds, title, body, url } = await req.json();
@@ -28,7 +24,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ sent: 0 });
   }
 
-  await sendPushToProfiles(supabase, targets, { title, body, url });
+  await notifyProfiles(supabase, targets, { title, body, url });
 
   return NextResponse.json({ sent: targets.length });
 }
