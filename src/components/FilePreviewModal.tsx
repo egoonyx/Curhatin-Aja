@@ -3,6 +3,12 @@
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
 const VIDEO_EXTS = ["mp4", "webm", "mov", "ogg", "ogv"];
 const AUDIO_EXTS = ["mp3", "wav", "m4a", "aac", "flac"];
+// Word / Excel / PowerPoint - rendered via Microsoft's free Office Online
+// viewer, which just needs a publicly reachable https URL (our Supabase
+// storage links qualify) - no download, no Office license needed to view.
+const OFFICE_EXTS = ["doc", "docx", "ppt", "pptx", "xls", "xlsx"];
+// Plain text formats browsers already know how to render inline in a frame.
+const TEXT_EXTS = ["txt", "csv", "md", "json", "log"];
 
 function getExt(fileName: string) {
   const dot = fileName.lastIndexOf(".");
@@ -16,7 +22,9 @@ export function isPreviewable(fileName: string) {
     IMAGE_EXTS.includes(ext) ||
     ext === "pdf" ||
     VIDEO_EXTS.includes(ext) ||
-    AUDIO_EXTS.includes(ext)
+    AUDIO_EXTS.includes(ext) ||
+    OFFICE_EXTS.includes(ext) ||
+    TEXT_EXTS.includes(ext)
   );
 }
 
@@ -34,6 +42,8 @@ export default function FilePreviewModal({
   const isPdf = ext === "pdf";
   const isVideo = VIDEO_EXTS.includes(ext);
   const isAudio = AUDIO_EXTS.includes(ext);
+  const isOffice = OFFICE_EXTS.includes(ext);
+  const isText = TEXT_EXTS.includes(ext);
 
   return (
     <div
@@ -82,6 +92,18 @@ export default function FilePreviewModal({
             <video src={fileUrl} controls className="max-h-[80vh] w-full rounded-lg" />
           ) : isAudio ? (
             <audio src={fileUrl} controls className="w-full" />
+          ) : isOffice ? (
+            <iframe
+              src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`}
+              title={fileName}
+              className="h-[80vh] w-full rounded-lg bg-white"
+            />
+          ) : isText ? (
+            <iframe
+              src={fileUrl}
+              title={fileName}
+              className="h-[80vh] w-full rounded-lg bg-white"
+            />
           ) : (
             <div className="p-10 text-center text-sm text-slate-500">
               <p>Preview isn&apos;t available for this file type.</p>
