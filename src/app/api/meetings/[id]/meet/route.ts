@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createGoogleMeetEvent, isGoogleMeetConfigured } from "@/lib/googleMeet";
-import { createZoomMeeting, isZoomConfigured } from "@/lib/zoom";
 
-// Creates the meeting link for a scheduled meeting - Google Meet when it's
-// configured, falling back to Zoom so nothing breaks mid-switchover, and
-// skipping gracefully if neither is set up yet.
+// Creates the meeting link for a scheduled meeting via Google Meet, skipping
+// gracefully if it isn't configured yet. Zoom integration has been removed.
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -69,35 +67,8 @@ export async function POST(
     }
   }
 
-  if (isZoomConfigured()) {
-    const durationMinutes = Math.max(
-      15,
-      Math.round((new Date(endTime).getTime() - new Date(meeting.start_time).getTime()) / 60000)
-    );
-
-    const zoom = await createZoomMeeting({
-      topic: meeting.title,
-      startTime: meeting.start_time,
-      durationMinutes,
-      agenda: meeting.description,
-    });
-
-    if (zoom) {
-      await supabase
-        .from("meetings")
-        .update({
-          zoom_join_url: zoom.joinUrl,
-          zoom_start_url: zoom.startUrl,
-          zoom_meeting_id: zoom.meetingId,
-        })
-        .eq("id", id);
-
-      return NextResponse.json({ joinUrl: zoom.joinUrl, provider: "zoom" });
-    }
-  }
-
   return NextResponse.json({
     skipped: true,
-    reason: "No video meeting provider is connected yet - ask an admin to add the Google or Zoom API keys.",
+    reason: "Google Meet isn't connected yet - ask an admin to add the Google service account keys.",
   });
 }
