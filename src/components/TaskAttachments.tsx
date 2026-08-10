@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import GalleryPicker from "@/components/GalleryPicker";
+import FilePreviewModal, { isPreviewable } from "@/components/FilePreviewModal";
 import { formatDateTime } from "@/lib/utils";
 import type { GalleryFile, Profile, TaskAttachment } from "@/lib/types";
 
@@ -29,6 +30,7 @@ export default function TaskAttachments({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<TaskAttachment | null>(null);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -138,15 +140,26 @@ export default function TaskAttachments({
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <Avatar name={uploader?.full_name ?? "?"} url={uploader?.avatar_url} size={24} />
                   <div className="min-w-0">
-                    <a
-                      href={a.file_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex min-w-0 items-center gap-1 truncate text-sm text-sky-600 hover:underline"
-                    >
-                      <span>📎</span>
-                      <span className="truncate">{a.file_name}</span>
-                    </a>
+                    {isPreviewable(a.file_name) ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewFile(a)}
+                        className="flex min-w-0 items-center gap-1 truncate text-sm text-sky-600 hover:underline"
+                      >
+                        <span>📎</span>
+                        <span className="truncate">{a.file_name}</span>
+                      </button>
+                    ) : (
+                      <a
+                        href={a.file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex min-w-0 items-center gap-1 truncate text-sm text-sky-600 hover:underline"
+                      >
+                        <span>📎</span>
+                        <span className="truncate">{a.file_name}</span>
+                      </a>
+                    )}
                     <p className="truncate text-xs text-slate-400">
                       {uploader?.full_name ?? "Unknown"} · {formatDateTime(a.created_at)}
                     </p>
@@ -171,6 +184,14 @@ export default function TaskAttachments({
           currentUserId={currentUserId}
           onSelect={handleGallerySelect}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {previewFile && (
+        <FilePreviewModal
+          fileUrl={previewFile.file_url}
+          fileName={previewFile.file_name}
+          onClose={() => setPreviewFile(null)}
         />
       )}
     </div>

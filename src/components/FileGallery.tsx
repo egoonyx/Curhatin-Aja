@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import ShareFileModal from "@/components/ShareFileModal";
+import FilePreviewModal, { isPreviewable } from "@/components/FilePreviewModal";
 import { formatDateTime } from "@/lib/utils";
 import type { Department, GalleryFile, GalleryFolder, Profile } from "@/lib/types";
 
@@ -37,6 +38,7 @@ export default function FileGallery({
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<GalleryFile | null>(null);
+  const [previewFile, setPreviewFile] = useState<GalleryFile | null>(null);
 
   const profilesById = Object.fromEntries(allProfiles.map((p) => [p.id, p]));
 
@@ -304,14 +306,24 @@ export default function FileGallery({
                 const canManage = isAdmin || f.uploaded_by === currentUserId;
                 return (
                   <div key={f.id} className="card flex flex-col gap-2 p-4">
-                    <a
-                      href={f.file_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="truncate text-sm font-medium text-sky-600 hover:underline"
-                    >
-                      📄 {f.file_name}
-                    </a>
+                    {isPreviewable(f.file_name) ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewFile(f)}
+                        className="truncate text-left text-sm font-medium text-sky-600 hover:underline"
+                      >
+                        📄 {f.file_name}
+                      </button>
+                    ) : (
+                      <a
+                        href={f.file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="truncate text-sm font-medium text-sky-600 hover:underline"
+                      >
+                        📄 {f.file_name}
+                      </a>
+                    )}
                     <div className="flex items-center gap-2">
                       <Avatar name={uploader?.full_name ?? "?"} url={uploader?.avatar_url} size={22} />
                       <p className="min-w-0 truncate text-xs text-slate-400">
@@ -351,6 +363,14 @@ export default function FileGallery({
           currentUserId={currentUserId}
           allProfiles={allProfiles}
           onClose={() => setShareTarget(null)}
+        />
+      )}
+
+      {previewFile && (
+        <FilePreviewModal
+          fileUrl={previewFile.file_url}
+          fileName={previewFile.file_name}
+          onClose={() => setPreviewFile(null)}
         />
       )}
     </div>

@@ -5,8 +5,16 @@ import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import GalleryPicker from "@/components/GalleryPicker";
 import ScheduleMeetingModal from "@/components/ScheduleMeetingModal";
+import FilePreviewModal, { isPreviewable } from "@/components/FilePreviewModal";
 import { formatDateTime } from "@/lib/utils";
 import type { ChatMessage, GalleryFile, Profile } from "@/lib/types";
+
+const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
+function isImageFile(fileName: string) {
+  const dot = fileName.lastIndexOf(".");
+  const ext = dot === -1 ? "" : fileName.slice(dot + 1).toLowerCase();
+  return IMAGE_EXTS.includes(ext);
+}
 
 export default function ChatWindow({
   channelId,
@@ -37,6 +45,7 @@ export default function ChatWindow({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [sending, setSending] = useState(false);
+  const [previewMsg, setPreviewMsg] = useState<ChatMessage | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -186,15 +195,39 @@ export default function ChatWindow({
                     {m.body}
                   </div>
                 )}
-                {m.attachment_url && (
-                  <a
-                    href={m.attachment_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 block text-xs text-sky-600 underline"
+                {m.attachment_url && isImageFile(m.attachment_name ?? "") && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewMsg(m)}
+                    className="mt-1 block"
                   >
-                    📎 {m.attachment_name ?? "Attachment"}
-                  </a>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={m.attachment_url}
+                      alt={m.attachment_name ?? "Attachment"}
+                      className="max-h-48 w-auto rounded-lg border border-sky-100 object-contain"
+                    />
+                  </button>
+                )}
+                {m.attachment_url && !isImageFile(m.attachment_name ?? "") && (
+                  isPreviewable(m.attachment_name ?? "") ? (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMsg(m)}
+                      className="mt-1 block text-xs text-sky-600 underline"
+                    >
+                      📎 {m.attachment_name ?? "Attachment"}
+                    </button>
+                  ) : (
+                    <a
+                      href={m.attachment_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 block text-xs text-sky-600 underline"
+                    >
+                      📎 {m.attachment_name ?? "Attachment"}
+                    </a>
+                  )
                 )}
               </div>
             </div>
@@ -271,6 +304,14 @@ export default function ChatWindow({
           defaultAttendees={(memberProfiles ?? []).filter((p) => p.id !== currentUserId)}
           allProfiles={allProfiles ?? memberProfiles ?? []}
           onClose={() => setScheduling(false)}
+        />
+      )}
+
+      {previewMsg?.attachment_url && (
+        <FilePreviewModal
+          fileUrl={previewMsg.attachment_url}
+          fileName={previewMsg.attachment_name ?? "Attachment"}
+          onClose={() => setPreviewMsg(null)}
         />
       )}
     </div>
