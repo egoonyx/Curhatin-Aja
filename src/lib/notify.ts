@@ -45,7 +45,7 @@ export async function notifyProfiles(
                 <p>${payload.body}</p>
                 ${
                   payload.url
-                    ? `<p><a href="https://curhatin-aja-seven.vercel.app${payload.url}">Open in Curhatin Aja</a></p>`
+                    ? `<p><a href="https://app.curhatingroup.id${payload.url}">Open in Curhatin Aja</a></p>`
                     : ""
                 }
                 <p style="color:#94a3b8;font-size:12px;">
