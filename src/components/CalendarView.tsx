@@ -328,16 +328,6 @@ function MeetingRow({
             Join Google Meet
           </a>
         )}
-        {!meeting.meet_join_url && meeting.zoom_join_url && (
-          <a
-            href={meeting.zoom_join_url}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-secondary text-xs"
-          >
-            Join Zoom
-          </a>
-        )}
         {linkHref && (
           <Link href={linkHref} className="text-xs text-sky-600 hover:underline">
             View {meeting.task_id ? "task" : "chat"}
