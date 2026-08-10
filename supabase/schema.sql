@@ -124,7 +124,8 @@ alter table public.task_attachments add column if not exists gallery_file_id uui
 
 -- =========================================================
 -- MEETINGS (calendar, optionally linked to a task or chat, with an
--- auto-generated Zoom link when ZOOM_* env vars are configured)
+-- auto-generated meeting link - Google Meet when GOOGLE_* env vars are
+-- configured, falling back to Zoom when only ZOOM_* env vars are set)
 -- =========================================================
 
 create table if not exists public.meetings (
@@ -141,6 +142,12 @@ create table if not exists public.meetings (
   zoom_meeting_id text,
   created_at timestamptz not null default now()
 );
+
+-- Google Meet, added alongside the existing zoom_* columns rather than
+-- replacing them, so a meeting created before the Google switchover keeps
+-- working and nothing has to be migrated.
+alter table public.meetings add column if not exists meet_join_url text;
+alter table public.meetings add column if not exists meet_event_id text;
 
 create table if not exists public.meeting_attendees (
   meeting_id uuid not null references public.meetings (id) on delete cascade,
