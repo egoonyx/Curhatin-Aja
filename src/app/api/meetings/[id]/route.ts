@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { deleteZoomMeeting, isZoomConfigured } from "@/lib/zoom";
 import { deleteGoogleMeetEvent, isGoogleMeetConfigured } from "@/lib/googleMeet";
 
 export async function DELETE(
@@ -40,9 +39,6 @@ export async function DELETE(
 
   if (meeting.meet_event_id && isGoogleMeetConfigured()) {
     await deleteGoogleMeetEvent(meeting.meet_event_id);
-  }
-  if (meeting.zoom_meeting_id && isZoomConfigured()) {
-    await deleteZoomMeeting(meeting.zoom_meeting_id);
   }
 
   const { error } = await supabase.from("meetings").delete().eq("id", id);
