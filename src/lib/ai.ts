@@ -1,12 +1,15 @@
-// Anthropic (Claude) helper for the Marketing content-analysis feature.
-// Requires ANTHROPIC_API_KEY. If it's missing, callers should gracefully
-// skip the AI analysis and still save the link + any manually-entered
-// metrics.
+// Google Gemini helper for the Marketing content-analysis feature.
+// Requires GEMINI_API_KEY. Optionally set GEMINI_MODEL to override the
+// model id below without a code change. If the key is missing, callers
+// should gracefully skip the AI analysis and still save the link + any
+// manually-entered metrics.
 
-const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_URL = () =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 export function isAiConfigured() {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(process.env.GEMINI_API_KEY);
 }
 
 async function fetchPageText(url: string): Promise<{ title: string | null; text: string }> {
@@ -51,40 +54,47 @@ export type ContentAnalysis = {
 };
 
 export async function analyzeContentLink(url: string): Promise<ContentAnalysis | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
   const { title, text } = await fetchPageText(url);
   if (!text) return null;
 
   try {
-    const res = await fetch(ANTHROPIC_URL, {
+    const res = await fetch(GEMINI_URL(), {
       method: "POST",
       headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        "x-goog-api-key": apiKey,
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 600,
-        messages: [
+        contents: [
           {
-            role: "user",
-            content:
-              `You're helping a marketing team analyze a piece of published content.\n` +
-              `Here is the page text/description (may be partial):\n\n${text}\n\n` +
-              `Reply with ONLY valid JSON, no markdown fences, matching exactly this shape:\n` +
-              `{"summary": "2-3 sentence summary", "tone": "one or two words describing tone", ` +
-              `"topics": ["short topic", "short topic"], "suggestions": "1-2 sentence improvement suggestion"}`,
+            parts: [
+              {
+                text:
+                  `You're helping a marketing team analyze a piece of published content.\n` +
+                  `Here is the page text/description (may be partial):\n\n${text}\n\n` +
+                  `Reply with ONLY valid JSON, no markdown fences, matching exactly this shape:\n` +
+                  `{"summary": "2-3 sentence summary", "tone": "one or two words describing tone", ` +
+                  `"topics": ["short topic", "short topic"], "suggestions": "1-2 sentence improvement suggestion"}`,
+              },
+            ],
           },
         ],
+        generationConfig: {
+          response_mime_type: "application/json",
+        },
       }),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "");
+      console.error(`[ai] Gemini request failed (${res.status}):`, errorBody);
+      return null;
+    }
     const data = await res.json();
-    const raw: string = data?.content?.[0]?.text ?? "";
+    const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
     const parsed = JSON.parse(jsonMatch[0]);
@@ -96,7 +106,8 @@ export async function analyzeContentLink(url: string): Promise<ContentAnalysis |
       topics: Array.isArray(parsed.topics) ? parsed.topics.map(String) : [],
       suggestions: String(parsed.suggestions ?? ""),
     };
-  } catch {
+  } catch (err) {
+    console.error("[ai] Gemini request threw:", err);
     return null;
   }
 }
