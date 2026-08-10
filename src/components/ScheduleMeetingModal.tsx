@@ -115,17 +115,17 @@ export default function ScheduleMeetingModal({
     }
 
     try {
-      const res = await fetch(`/api/meetings/${meeting.id}/zoom`, {
+      const res = await fetch(`/api/meetings/${meeting.id}/meet`, {
         method: "POST",
       });
       const data = await res.json();
       if (data.joinUrl) {
         setResult({ joinUrl: data.joinUrl });
       } else {
-        setResult({ note: data.reason ?? "Meeting scheduled without a Zoom link." });
+        setResult({ note: data.reason ?? "Meeting scheduled without a video link." });
       }
     } catch {
-      setResult({ note: "Meeting scheduled, but the Zoom link could not be created." });
+      setResult({ note: "Meeting scheduled, but the video link could not be created." });
     }
 
     setSaving(false);

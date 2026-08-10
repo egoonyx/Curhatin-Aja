@@ -318,7 +318,17 @@ function MeetingRow({
         </div>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {meeting.zoom_join_url && (
+        {meeting.meet_join_url && (
+          <a
+            href={meeting.meet_join_url}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-secondary text-xs"
+          >
+            Join Google Meet
+          </a>
+        )}
+        {!meeting.meet_join_url && meeting.zoom_join_url && (
           <a
             href={meeting.zoom_join_url}
             target="_blank"
