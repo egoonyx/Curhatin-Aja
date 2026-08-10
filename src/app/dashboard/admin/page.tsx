@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DepartmentAdmin from "@/components/DepartmentAdmin";
 import EmployeeAdmin from "@/components/EmployeeAdmin";
+import HRExport from "@/components/HRExport";
 import type { Department, Profile } from "@/lib/types";
 
 export default async function AdminPage() {
@@ -59,6 +60,7 @@ export default async function AdminPage() {
       </div>
 
       {isSuperAdmin && <DepartmentAdmin departments={allDepartments} />}
+      <HRExport profiles={scopedProfiles} departments={scopedDepartments} />
       <EmployeeAdmin
         profiles={scopedProfiles}
         departments={scopedDepartments}
