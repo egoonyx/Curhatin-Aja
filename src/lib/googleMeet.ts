@@ -24,11 +24,16 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CALENDAR_BASE = "https://www.googleapis.com/calendar/v3";
 
 export function isGoogleMeetConfigured() {
-  return Boolean(
-    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
-      process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY &&
-      process.env.GOOGLE_IMPERSONATE_EMAIL
-  );
+  const missing = [
+    !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+    !process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY && "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+    !process.env.GOOGLE_IMPERSONATE_EMAIL && "GOOGLE_IMPERSONATE_EMAIL",
+  ].filter(Boolean);
+  if (missing.length > 0) {
+    console.error("[googleMeet] Not configured - missing env var(s):", missing.join(", "));
+    return false;
+  }
+  return true;
 }
 
 function base64url(input: Buffer | string): string {
@@ -66,7 +71,11 @@ async function getAccessToken(): Promise<string | null> {
     signer.update(unsigned);
     signer.end();
     signature = signer.sign(privateKey);
-  } catch {
+  } catch (err) {
+    console.error(
+      "[googleMeet] Failed to sign JWT - GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY is likely malformed:",
+      err
+    );
     return null;
   }
 
@@ -81,10 +90,18 @@ async function getAccessToken(): Promise<string | null> {
         assertion,
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "");
+      console.error(
+        `[googleMeet] Token exchange failed (${res.status}):`,
+        errorBody
+      );
+      return null;
+    }
     const data = await res.json();
     return data.access_token ?? null;
-  } catch {
+  } catch (err) {
+    console.error("[googleMeet] Token exchange request threw:", err);
     return null;
   }
 }
@@ -149,7 +166,11 @@ export async function createGoogleMeetEvent({
       }
     );
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "");
+      console.error(`[googleMeet] Calendar event creation failed (${res.status}):`, errorBody);
+      return null;
+    }
     const data = await res.json();
 
     const joinUrl: string | undefined =
