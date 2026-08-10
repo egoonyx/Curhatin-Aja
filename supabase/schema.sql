@@ -1376,3 +1376,13 @@ as $$
 $$;
 
 grant execute on function public.get_push_subscriptions_for(uuid[]) to authenticated;
+
+-- =========================================================
+-- NOTIFICATION PREFERENCES: each person chooses whether they get pushed
+-- to their phone/browser, emailed, both, or neither. Defaults to push-on,
+-- email-off, since push requires an explicit opt-in gesture anyway
+-- (browser permission prompt) while email would otherwise go out silently.
+-- =========================================================
+
+alter table public.profiles add column if not exists notify_push boolean not null default true;
+alter table public.profiles add column if not exists notify_email boolean not null default false;
