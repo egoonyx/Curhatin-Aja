@@ -166,6 +166,22 @@ create table if not exists public.attendance (
   unique (profile_id, date)
 );
 
+-- Tracks which days the /api/cron/attendance-reminder job has already
+-- nudged someone, so it never reminds the same person twice in one day.
+-- Deliberately a separate table rather than a column on attendance, since
+-- inserting a placeholder attendance row would force a misleading status
+-- value (the column doesn't allow a neutral "not checked in yet" state).
+create table if not exists public.check_in_reminders_sent (
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  date date not null,
+  sent_at timestamptz not null default now(),
+  primary key (profile_id, date)
+);
+
+alter table public.check_in_reminders_sent enable row level security;
+-- service-role only (the cron route) - no policies needed for anon/authenticated,
+-- since RLS with zero policies denies all access to those roles by default.
+
 create table if not exists public.chat_channels (
   id uuid primary key default gen_random_uuid(),
   name text,
