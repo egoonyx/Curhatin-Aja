@@ -1,8 +1,8 @@
 // Web Push helper. Requires VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and
 // VAPID_SUBJECT (a mailto: address or URL) env vars - generate a keypair
 // with `npx web-push generate-vapid-keys`. If any of these are missing,
-// callers should gracefully skip sending (same pattern as isZoomConfigured()
-// in src/lib/zoom.ts).
+// callers should gracefully skip sending (same pattern as isEmailConfigured()
+// in src/lib/email.ts).
 //
 // This does NOT use the Supabase service-role key. Subscriptions belonging
 // to other profiles are read via the get_push_subscriptions_for(uuid[])

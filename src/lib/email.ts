@@ -1,7 +1,7 @@
 // Transactional email via Resend (https://resend.com). Requires RESEND_API_KEY
 // and RESEND_FROM (a "Name <address@yourdomain>" sender that's been verified
 // in the Resend dashboard) env vars. If either is missing, callers should
-// gracefully skip sending - same pattern as isZoomConfigured() in zoom.ts.
+// gracefully skip sending - same pattern as isEmailConfigured() below.
 
 const RESEND_API = "https://api.resend.com/emails";
 

@@ -11,12 +11,11 @@
 //     must be authorized for domain-wide delegation with the
 //     https://www.googleapis.com/auth/calendar scope in admin.google.com).
 //
-// If any of these are missing, callers should gracefully skip the Meet link
-// (same pattern as isZoomConfigured() in zoom.ts).
+// If any of these are missing, callers should gracefully skip the Meet link.
 //
 // No googleapis dependency needed - this signs its own short-lived JWT with
 // Node's built-in crypto module and talks to the REST API directly, the same
-// minimal-dependency style as zoom.ts and email.ts.
+// minimal-dependency style as email.ts.
 
 import crypto from "crypto";
 
