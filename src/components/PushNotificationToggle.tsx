@@ -16,10 +16,20 @@ function urlBase64ToUint8Array(base64String: string) {
 
 type Status = "checking" | "unsupported" | "off" | "on" | "denied";
 
-export default function PushNotificationToggle({ currentUserId }: { currentUserId: string }) {
+export default function PushNotificationToggle({
+  currentUserId,
+  initialNotifyEmail,
+}: {
+  currentUserId: string;
+  /** Whether this person currently has email notifications turned on. */
+  initialNotifyEmail: boolean;
+}) {
   const [status, setStatus] = useState<Status>("checking");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [notifyEmail, setNotifyEmail] = useState(initialNotifyEmail);
+  const [emailBusy, setEmailBusy] = useState(false);
 
   useEffect(() => {
     async function check() {
@@ -84,6 +94,7 @@ export default function PushNotificationToggle({ currentUserId }: { currentUserI
         return;
       }
 
+      await supabase.from("profiles").update({ notify_push: true }).eq("id", currentUserId);
       setStatus("on");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not enable notifications.");
@@ -102,6 +113,7 @@ export default function PushNotificationToggle({ currentUserId }: { currentUserI
         await subscription.unsubscribe();
         const supabase = createClient();
         await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+        await supabase.from("profiles").update({ notify_push: false }).eq("id", currentUserId);
       }
       setStatus("off");
     } catch (err) {
@@ -110,50 +122,89 @@ export default function PushNotificationToggle({ currentUserId }: { currentUserI
     setBusy(false);
   }
 
+  async function handleToggleEmail() {
+    const next = !notifyEmail;
+    setNotifyEmail(next);
+    setEmailBusy(true);
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ notify_email: next })
+      .eq("id", currentUserId);
+    if (updateError) {
+      setNotifyEmail(!next);
+      setError(updateError.message);
+    }
+    setEmailBusy(false);
+  }
+
   return (
     <div className="card p-5">
-      <h2 className="mb-1 text-sm font-semibold text-slate-700">Phone notifications</h2>
+      <h2 className="mb-1 text-sm font-semibold text-slate-700">Notifications</h2>
       <p className="mb-3 text-sm text-slate-500">
-        Get a notification on your phone or computer for new messages, task assignments, and
-        meeting invites - even when Curhatin Aja isn&apos;t open in your browser.
+        Get notified about new messages, task assignments, and meeting invites - choose phone
+        push, email, both, or neither.
       </p>
 
-      {status === "checking" && <p className="text-sm text-slate-400">Checking...</p>}
+      <div className="space-y-3">
+        <div>
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">
+            Phone / browser push
+          </p>
 
-      {status === "unsupported" && (
-        <p className="text-sm text-slate-400">
-          Your browser doesn&apos;t support push notifications. On iPhone, add this site to your
-          Home Screen first (Share → Add to Home Screen), then try again from there.
-        </p>
-      )}
+          {status === "checking" && <p className="text-sm text-slate-400">Checking...</p>}
 
-      {status === "denied" && (
-        <p className="text-sm text-amber-600">
-          Notifications are blocked for this site in your browser settings. Enable them from your
-          browser&apos;s site settings to turn this on.
-        </p>
-      )}
+          {status === "unsupported" && (
+            <p className="text-sm text-slate-400">
+              Your browser doesn&apos;t support push notifications. On iPhone, add this site to
+              your Home Screen first (Share → Add to Home Screen), then try again from there.
+            </p>
+          )}
 
-      {status === "off" && (
-        <button onClick={handleEnable} disabled={busy} className="btn-primary text-sm">
-          {busy ? "Enabling..." : "Enable phone notifications"}
-        </button>
-      )}
+          {status === "denied" && (
+            <p className="text-sm text-amber-600">
+              Notifications are blocked for this site in your browser settings. Enable them from
+              your browser&apos;s site settings to turn this on.
+            </p>
+          )}
 
-      {status === "on" && (
-        <div className="flex items-center gap-3">
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
-            Enabled on this device
-          </span>
-          <button
-            onClick={handleDisable}
-            disabled={busy}
-            className="text-xs font-medium text-slate-400 hover:text-red-500"
-          >
-            {busy ? "Disabling..." : "Turn off"}
-          </button>
+          {status === "off" && (
+            <button onClick={handleEnable} disabled={busy} className="btn-primary text-sm">
+              {busy ? "Enabling..." : "Enable phone notifications"}
+            </button>
+          )}
+
+          {status === "on" && (
+            <div className="flex items-center gap-3">
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+                Enabled on this device
+              </span>
+              <button
+                onClick={handleDisable}
+                disabled={busy}
+                className="text-xs font-medium text-slate-400 hover:text-red-500"
+              >
+                {busy ? "Disabling..." : "Turn off"}
+              </button>
+            </div>
+          )}
         </div>
-      )}
+
+        <div className="border-t border-sky-50 pt-3">
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">
+            Email
+          </p>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={notifyEmail}
+              disabled={emailBusy}
+              onChange={handleToggleEmail}
+            />
+            Also email me for the same updates
+          </label>
+        </div>
+      </div>
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </div>
